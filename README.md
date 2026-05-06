@@ -75,8 +75,20 @@ Install dependencies:
  
 ```bash
 pip install -r requirements.txt
- ```
- 
+ ``` 
+If any library version gives error then use this one  
+
+- fastapi==0.136.1
+- mediapipe==0.10.13
+- numpy==2.4.4
+- opencv-python==4.13.0.92
+- pydantic==2.13.3
+- pydantic_core==2.46.3
+- ultralytics==8.4.46
+- ultralytics-thop==2.0.19
+- uvicorn==0.46.0
+- websockets==16.0
+
 Start the server:
  
 ```bash
