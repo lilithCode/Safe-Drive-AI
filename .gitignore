@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 venv/
 __pycache__/
@@ -6,12 +7,58 @@ __pycache__/
 # dependencies
 /node_modules
 /.pnp
+=======
+# ========================
+# Python / Backend
+# ========================
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+backend/venv/
+backend/__pycache__/
+
+# ========================
+# Node / Frontend
+# ========================
+node_modules/
+frontend/node_modules/
+
+# ========================
+# Next.js
+# ========================
+.next/
+frontend/.next/
+/out/
+frontend/out/
+
+# ========================
+# Build outputs
+# ========================
+/build
+frontend/build/
+
+# ========================
+# Testing
+# ========================
+/coverage
+frontend/coverage/
+
+# ========================
+# Package managers
+# ========================
+.pnp
+>>>>>>> a4afd09 (Add: Frontend)
 .pnp.*
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+<<<<<<< HEAD
 
 # testing
 /coverage
@@ -42,3 +89,27 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+=======
+.pnpm-debug.log*
+
+# ========================
+# Logs
+# ========================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ========================
+# TypeScript
+# ========================
+*.tsbuildinfo
+next-env.d.ts
+
+# ========================
+# Misc
+# ========================
+.DS_Store
+*.pem
+.vercel
+>>>>>>> a4afd09 (Add: Frontend)
