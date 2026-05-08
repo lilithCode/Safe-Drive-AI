@@ -1,4 +1,3 @@
-// filepath: ./AI Projects/SafeDrive/frontend/app/page.tsx
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
@@ -18,69 +17,71 @@ export default function Dashboard() {
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // Core State
   const [hasStarted, setHasStarted] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isEmergency, setIsEmergency] = useState(false);
   const [aiData, setAiData] = useState<AIResponse | null>(null);
   const [safetyScore, setSafetyScore] = useState(100);
 
-  // Stats State
   const [alertsToday, setAlertsToday] = useState(0);
   const [driveTime, setDriveTime] = useState(0); // in minutes
   const [alertLogs, setAlertLogs] = useState<any[]>([]);
 
-  // Smoothing Refs
   const lastAlertTime = useRef<number>(0);
   const yawnFramesRef = useRef<number>(0);
   const penaltyFrames = useRef<number>(0);
   const safeFrames = useRef<number>(0);
   const driveStartTime = useRef<number>(Date.now());
 
-  // Update Drive Time
+  //set up drive timer
   useEffect(() => {
     if (!hasStarted) return;
     const interval = setInterval(() => {
-      setDriveTime(Math.floor((Date.now() - driveStartTime.current) / 60000));
+      setDriveTime(Math.floor((Date.now() - driveStartTime.current) / 60000)); //like 12:15 - 12:00 = 15 minutes
     }, 60000);
-    return () => clearInterval(interval);
+    return () => clearInterval(interval); // When this component unmounts, stop the interval
   }, [hasStarted]);
 
+  // WebSocket connection
   useEffect(() => {
     if (!hasStarted || isEmergency) return;
 
-    const ws = new WebSocket("ws://localhost:8000/ws/video");
+    const ws = new WebSocket("ws://localhost:8000/ws/video"); //connects to the backend python server
     wsRef.current = ws;
 
     ws.onopen = () => setIsConnected(true);
     ws.onclose = () => setIsConnected(false);
 
     ws.onmessage = (event) => {
-      const rawData: AIResponse = JSON.parse(event.data);
+      const rawData: AIResponse = JSON.parse(event.data); // event is the message from the backend
 
-      // Filter: Requires mouth open for multiple frames to trigger a yawn
+      // Yawning detection requires 3 consecutive frames of yawning to trigger alert
+      // This will prevent from false positives when the driver is just talking
       if (rawData.yawning) yawnFramesRef.current += 1;
       else yawnFramesRef.current = 0;
 
-      const filteredData = { ...rawData, yawning: yawnFramesRef.current >= 3 };
+      const filteredData = { ...rawData, yawning: yawnFramesRef.current >= 3 }; //spread rawDATA and add yawing only if frames are greater than 3
 
       setAiData(filteredData);
       updateSafetyScore(filteredData);
       triggerAudioAlerts(filteredData);
     };
 
+    //clean up function after the component is unmounted
     return () => ws.close();
   }, [hasStarted, isEmergency]);
 
+  //video dealing from webcam
   useEffect(() => {
     if (!isConnected || !hasStarted || isEmergency) return;
 
     const interval = setInterval(() => {
       if (webcamRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-        const imageSrc = webcamRef.current.getScreenshot();
-        if (imageSrc) wsRef.current.send(imageSrc);
+        //only if webCam exists and websocket connetions are open
+        const imageSrc = webcamRef.current.getScreenshot(); //return a base64 string text image
+        if (imageSrc) wsRef.current.send(imageSrc); //sends that base64 image to websocket back
       }
-    }, 250); // 4 FPS
+    }, 60); // 16 FPS (as 1/0.60 = 16 ) this will run 16 times per sec
 
     return () => clearInterval(interval);
   }, [isConnected, hasStarted, isEmergency]);
@@ -96,6 +97,7 @@ export default function Dashboard() {
       audioCtxRef.current.resume();
     }
 
+    // Play an welcome audio message
     const unlockAudio = new SpeechSynthesisUtterance(
       "System Active. Monitoring started.",
     );
@@ -103,28 +105,31 @@ export default function Dashboard() {
     window.speechSynthesis.speak(unlockAudio);
   };
 
+  // Logs alerts with a timestamp and type (critical, warning, info) to display in the AlertHistory component
   const logAlert = (
     title: string,
     desc: string,
     type: "critical" | "warning" | "info",
   ) => {
-    setAlertLogs((prev) =>
-      [
-        {
-          id: Date.now(),
-          title,
-          desc,
-          time: new Date().toLocaleTimeString(),
-          type,
-        },
-        ...prev,
-      ].slice(0, 5),
+    setAlertLogs(
+      (prev) =>
+        [
+          {
+            id: Date.now(),
+            title,
+            desc,
+            time: new Date().toLocaleTimeString(),
+            type,
+          },
+          ...prev,
+        ].slice(0, 5), // Keep only the latest 5 alerts in the log
     );
     setAlertsToday((prev) => prev + 1);
   };
 
-  // FIX: Stable Scoring Logic
+  // Scoring Logic
   const updateSafetyScore = useCallback((data: AIResponse) => {
+    // getting the current score and then applying penalty or reward based on the data from the backend
     setSafetyScore((prev) => {
       let isUnsafe = false;
       let currentPenalty = 0;
@@ -153,36 +158,37 @@ export default function Dashboard() {
       if (isUnsafe) {
         safeFrames.current = 0;
         penaltyFrames.current += 1;
-        // Require 3 consecutive unsafe frames before dropping score (prevents jitter)
+        // Require 3 consecutive unsafe frames before dropping score
         if (penaltyFrames.current >= 3)
-          return Math.max(0, prev - currentPenalty);
+          return Math.max(0, prev - currentPenalty); // makes sure the scroes dn't go negative
         return prev;
       } else {
         penaltyFrames.current = 0;
         safeFrames.current += 1;
-        // Require 2 consecutive safe frames to start regenerating score
-        if (safeFrames.current >= 2) return Math.min(100, prev + 1);
+        // Require 2 consecutive safe frames to start healing score
+        if (safeFrames.current >= 2) return Math.min(100, prev + 1); // makes sure that scores don't exceed the max 100
         return prev;
       }
     });
   }, []);
 
+  // Plays a short beep sound using Web Audio API to alert the driver before the speech synthesis message is read out loud
   const playBeep = () => {
     if (!audioCtxRef.current) return;
-    const osc = audioCtxRef.current.createOscillator();
-    const gain = audioCtxRef.current.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtxRef.current.destination);
-    osc.type = "square";
-    osc.frequency.setValueAtTime(600, audioCtxRef.current.currentTime);
-    gain.gain.setValueAtTime(0.05, audioCtxRef.current.currentTime);
+    const osc = audioCtxRef.current.createOscillator(); //creates a sound wave generator
+    const gain = audioCtxRef.current.createGain(); //gain node to control the volume of the beep
+    osc.connect(gain); //connects the oscillator to the gain node
+    gain.connect(audioCtxRef.current.destination); //connects the gain node to the audio output (speakers)
+    osc.type = "square"; // square wave for a sharper beep sound
+    osc.frequency.setValueAtTime(600, audioCtxRef.current.currentTime); // 600 Hz beep
+    gain.gain.setValueAtTime(0.05, audioCtxRef.current.currentTime); // Volume control at 5%
     osc.start();
-    osc.stop(audioCtxRef.current.currentTime + 0.2);
+    osc.stop(audioCtxRef.current.currentTime + 0.2); // Beep duration of 0.2 seconds
   };
 
   const triggerAudioAlerts = useCallback((data: AIResponse) => {
     const now = Date.now();
-    if (now - lastAlertTime.current < 5000) return; // 5-second cooldown
+    if (now - lastAlertTime.current < 3000) return; // 3 sec cooldown period before sending another warning
 
     let message = "";
     if (data.drowsy) {
@@ -194,7 +200,7 @@ export default function Dashboard() {
       );
     } else if (data.phone_detected) {
       message = "Please put your phone away.";
-      logAlert("Phone detected", "High confidence", "critical");
+      logAlert("Phone detected", "Distracted by phone", "critical");
     } else if (!data.face_detected) {
       message = "Please look at the camera.";
       logAlert("Face lost", "Camera view obscured", "warning");
@@ -208,8 +214,9 @@ export default function Dashboard() {
 
     if (message !== "") {
       lastAlertTime.current = now;
+      //play a beep and then hardware speakers will read the msg wiht 1.05 speed rate
       playBeep();
-      window.speechSynthesis.cancel();
+      window.speechSynthesis.cancel(); //stop any ongoing speech
       const utterance = new SpeechSynthesisUtterance(message);
       utterance.rate = 1.05;
       window.speechSynthesis.speak(utterance);
@@ -217,6 +224,7 @@ export default function Dashboard() {
   }, []);
 
   if (!hasStarted) {
+    //This is the loading page
     return (
       <div className="min-h-screen bg-zinc-950 flex flex-col justify-center items-center text-white">
         <h1 className="text-4xl font-bold mb-4">
@@ -238,7 +246,6 @@ export default function Dashboard() {
       <Header isConnected={isConnected} isEmergency={isEmergency} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 max-w-[1600px] mx-auto">
-        {/* Left Column (Video & Logs) */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           <VideoFeed
             webcamRef={webcamRef}
@@ -252,7 +259,6 @@ export default function Dashboard() {
           <AlertHistory logs={alertLogs} />
         </div>
 
-        {/* Right Column (Stats & Status) */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <SafetyScore score={safetyScore} />
           <DetectionStatus aiData={aiData} />

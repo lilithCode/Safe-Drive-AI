@@ -3,6 +3,6 @@ uvicorn
 websockets
 opencv-python
 mediapipe
-numpy
 ultralytics
-python-multipart
+numpy
+pydantic

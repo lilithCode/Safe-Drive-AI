@@ -1,57 +1,55 @@
+import base64
+import cv2 
+import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-import cv2
-import numpy as np
-import base64
 import json
-from vision_engine import FacialAnalyzer
+
+from detector import process_frame
 
 app = FastAPI()
 
-# Allow Next.js frontend to talk to this API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, change to your Next.js URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize AI Engine
-analyzer = FacialAnalyzer()
-
-@app.get("/")
-def read_root():
-    return {"status": "SafeDrive AI Backend is Running"}
-
-@app.websocket("/ws/video")
-async def video_websocket(websocket: WebSocket):
+@app.websocket("/ws/video") # WebSocket endpoint
+async def video_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("Frontend Connected to WebSockets!")
+    print("Frontend connected to WebSocket.")
+    
     try:
         while True:
-            # 1. Receive Base64 image from Next.js
+            # Receive Base64 image from React
             data = await websocket.receive_text()
             
-            # Remove the "data:image/jpeg;base64," prefix if it exists
-            if "," in data:
-                data = data.split(",")[1]
-                
-            # 2. Convert Base64 back to OpenCV Image
-            img_bytes = base64.b64decode(data)
-            np_arr = np.frombuffer(img_bytes, np.uint8)
-            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            # The frontend sends a Data URL (like "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ...")
+            # we need to split the header and the actual Base64 data
+            header, encoded = data.split(",", 1)
+            
+            # Decode the image from Base64 to bytes, then to a NumPy array, and finally to an OpenCV image
+            img_bytes = base64.b64decode(encoded) # converts to raw binary image data like b'\xff\xd8\xff\xe0\x00\x10JFIF...'
+            np_arr = np.frombuffer(img_bytes, np.uint8)  # gives 8bit int to represent the image data as a NumPy array like array([255, 216, 255, 224, 0, 16, 74, 70, 73, 70, ...], dtype=uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR) # converts to real image matrix , like output (H, W, 3 channels) array of pixel values 
             
             if frame is None:
                 continue
 
-            # 3. Analyze the frame using our Vision Engine
-            analysis_results = analyzer.analyze_frame(frame)
+            # Process AI Features on detector.py and get results
+            ai_data = process_frame(frame)
             
-            # 4. Send JSON results back to frontend
-            await websocket.send_text(json.dumps(analysis_results))
+            # Send AI Response back to React
+            await websocket.send_text(json.dumps(ai_data)) #json.dumps converts the dictionary to JSON
             
     except WebSocketDisconnect:
-        print("Frontend Disconnected")
+        print("Frontend disconnected.")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error processing frame: {e}")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) #runs the fastapi on port 8000

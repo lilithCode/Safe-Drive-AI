@@ -1,0 +1,41 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- High-Tech Gradient -->
+    <linearGradient id="ai-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" />   <!-- Blue -->
+      <stop offset="100%" stop-color="#10b981" /> <!-- Emerald Green -->
+    </linearGradient>
+  </defs>
+
+  <!-- Dark Background -->
+  <rect width="512" height="512" rx="120" fill="#09090b" />
+
+  <!-- Outer Shield -->
+  <path 
+    d="M256 80 L144 128 V256 C144 360 256 432 256 432 C256 432 368 360 368 256 V128 Z" 
+    fill="none" 
+    stroke="url(#ai-gradient)" 
+    stroke-width="32" 
+    stroke-linecap="round" 
+    stroke-linejoin="round" 
+  />
+
+  <!-- Low-Poly Geometric Eye (Matches the Face Mesh) -->
+  <path 
+    d="M192 256 Q256 192 320 256 Q256 320 192 256 Z" 
+    fill="none" 
+    stroke="url(#ai-gradient)" 
+    stroke-width="24" 
+    stroke-linecap="round" 
+    stroke-linejoin="round" 
+  />
+
+  <!-- Center AI Node (Pupil) -->
+  <circle cx="256" cy="256" r="28" fill="#10b981" />
+
+  <!-- Mesh Grid Lines (Connecting Shield to Eye) -->
+  <line x1="256" y1="80" x2="256" y2="192" stroke="#3b82f6" stroke-width="12" stroke-dasharray="12 12" stroke-linecap="round" />
+  <line x1="256" y1="320" x2="256" y2="432" stroke="#10b981" stroke-width="12" stroke-dasharray="12 12" stroke-linecap="round" />
+  <line x1="144" y1="256" x2="192" y2="256" stroke="#3b82f6" stroke-width="12" stroke-linecap="round" />
+  <line x1="368" y1="256" x2="320" y2="256" stroke="#10b981" stroke-width="12" stroke-linecap="round" />
+</svg>
