@@ -81,7 +81,7 @@ export default function Dashboard() {
         const imageSrc = webcamRef.current.getScreenshot(); //return a base64 string text image
         if (imageSrc) wsRef.current.send(imageSrc); //sends that base64 image to websocket back
       }
-    }, 60); // 16 FPS (as 1/0.60 = 16 ) this will run 16 times per sec
+    }, 250); // 4 FPS (as 1/0.25 = 4 ) this will run 4 times per sec
 
     return () => clearInterval(interval);
   }, [isConnected, hasStarted, isEmergency]);
@@ -98,11 +98,14 @@ export default function Dashboard() {
     }
 
     // Play an welcome audio message
-    const unlockAudio = new SpeechSynthesisUtterance(
-      "System Active. Monitoring started.",
-    );
-    unlockAudio.volume = 1;
-    window.speechSynthesis.speak(unlockAudio);
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const unlockAudio = new SpeechSynthesisUtterance(
+        "System Active. Monitoring started.",
+      );
+      unlockAudio.volume = 1;
+      window.speechSynthesis.speak(unlockAudio);
+    }
   };
 
   // Logs alerts with a timestamp and type (critical, warning, info) to display in the AlertHistory component
@@ -188,7 +191,8 @@ export default function Dashboard() {
 
   const triggerAudioAlerts = useCallback((data: AIResponse) => {
     const now = Date.now();
-    if (now - lastAlertTime.current < 3000) return; // 3 sec cooldown period before sending another warning
+    // 4000ms cooldown gives the voice enough time to actually finish reading the message
+    if (now - lastAlertTime.current < 4000) return;
 
     let message = "";
     if (data.drowsy) {
@@ -214,12 +218,18 @@ export default function Dashboard() {
 
     if (message !== "") {
       lastAlertTime.current = now;
-      //play a beep and then hardware speakers will read the msg wiht 1.05 speed rate
       playBeep();
-      window.speechSynthesis.cancel(); //stop any ongoing speech
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.rate = 1.05;
-      window.speechSynthesis.speak(utterance);
+
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel(); // Stop any ongoing speech
+
+        // This setTimeout is crucial! It stops Chrome from skipping the message.
+        setTimeout(() => {
+          const utterance = new SpeechSynthesisUtterance(message);
+          utterance.rate = 1.0; // Standard speed for max clarity
+          window.speechSynthesis.speak(utterance);
+        }, 100);
+      }
     }
   }, []);
 

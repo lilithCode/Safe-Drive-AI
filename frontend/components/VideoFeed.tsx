@@ -12,62 +12,6 @@ interface Props {
   safetyScore: number;
 }
 
-// geometric connections for the mesh look
-const FACE_CONNECTIONS = [
-  // Forehead & Center Vertical
-  [10, 168],
-  [168, 1],
-  [1, 0],
-  [0, 17],
-  [17, 152],
-  // Face Oval (Left)
-  [10, 67],
-  [67, 234],
-  [234, 132],
-  [132, 152],
-  // Face Oval (Right)
-  [10, 297],
-  [297, 454],
-  [454, 361],
-  [361, 152],
-  // Eyes (Triangulated)
-  [33, 133],
-  [133, 168],
-  [33, 168],
-  [362, 263],
-  [362, 168],
-  [263, 168],
-  // Nose/Cheek Geometry
-  [1, 33],
-  [1, 263], // Nose to Outer Eyes
-  [1, 234],
-  [1, 454], // Nose to Outer Cheeks
-  [0, 234],
-  [0, 454], // Mouth to Outer Cheeks
-  [17, 132],
-  [17, 361], // Chin/Mouth to Jaw
-  // Brow/Forehead Geometry
-  [10, 33],
-  [10, 263], // Forehead to Outer eyes
-  [67, 33],
-  [297, 263], // Forehead sides to Outer eyes
-  // Extra cross-connections for denser mesh
-  [67, 168],
-  [297, 168],
-  [234, 33],
-  [454, 263],
-  [132, 17],
-  [361, 17],
-  [234, 0],
-  [454, 0],
-  [67, 10],
-  [297, 10],
-  [132, 133],
-  [361, 362],
-  [234, 168],
-  [454, 168],
-];
-
 export default function VideoFeed({
   webcamRef,
   canvasRef,
@@ -97,16 +41,18 @@ export default function VideoFeed({
       const video = webcamRef.current?.video;
       const data = aiDataRef.current;
 
-      if (!canvas || !video) return;
+      // Ensure video is fully loaded before drawing to prevent aspect ratio desync
+      if (!canvas || !video || !video.videoWidth) return;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
+      // Match canvas dimensions exactly to video to ensure object-cover CSS aligns perfectly
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // DRAW FACE GRID MESH
+      // DRAW FACE GRID MESH (Full Dots Only)
       if (
         data &&
         data.face_detected &&
@@ -119,7 +65,6 @@ export default function VideoFeed({
 
         // Animation time drivers
         const now = Date.now();
-        const pulse = Math.sin(now / 400) * 0.5 + 0.5; // 0..1 slow pulse
         const fastPulse = Math.sin(now / 180) * 0.5 + 0.5; // 0..1 fast pulse
         const scanY = (now / 12) % canvas.height; // Scanline Y position
 
@@ -138,27 +83,7 @@ export default function VideoFeed({
           b = 8;
         } // Warning: Yellow
 
-        const alpha = 0.55 + pulse * 0.3; // Breathing alpha 0.55→0.85
-        const strokeColor = `rgba(${r},${g},${b},${alpha})`;
         const nodeColor = `rgb(${r},${g},${b})`;
-        const glowColor = `rgba(${r},${g},${b},${0.15 + fastPulse * 0.2})`;
-
-        // ── Draw connection lines with glow ──
-        ctx.shadowBlur = 8 + pulse * 10; // Breathing glow radius
-        ctx.shadowColor = nodeColor;
-        ctx.lineWidth = 1 + pulse * 0.8;
-        ctx.strokeStyle = strokeColor;
-
-        FACE_CONNECTIONS.forEach(([startIdx, endIdx]) => {
-          const start = data.landmarks[startIdx];
-          const end = data.landmarks[endIdx];
-          if (start && end) {
-            ctx.beginPath();
-            ctx.moveTo(start[0], start[1]);
-            ctx.lineTo(end[0], end[1]);
-            ctx.stroke();
-          }
-        });
 
         // ── Draw scanline sweep across the mesh ──
         ctx.shadowBlur = 0;
@@ -169,83 +94,35 @@ export default function VideoFeed({
         ctx.fillStyle = scanGrad;
         ctx.fillRect(0, scanY - 40, canvas.width, 80);
 
-        // ── Draw nodes ──
-        const uniqueNodes = Array.from(new Set(FACE_CONNECTIONS.flat()));
-
+        // ── Draw ALL 468 nodes for a full point-cloud look ──
         let minX = Infinity,
           minY = Infinity,
           maxX = -Infinity,
           maxY = -Infinity;
 
-        uniqueNodes.forEach((idx) => {
-          const pt = data.landmarks[idx];
-          if (!pt) return;
+        data.landmarks.forEach((pt) => {
+          // NO math needed here. The webcam mirror and backend data already perfectly align.
+          const x = pt[0];
+          const y = pt[1];
 
-          // Track boundaries
-          if (pt[0] < minX) minX = pt[0];
-          if (pt[1] < minY) minY = pt[1];
-          if (pt[0] > maxX) maxX = pt[0];
-          if (pt[1] > maxY) maxY = pt[1];
+          // Track boundaries for the HUD Box
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
 
-          // Glow halo behind each node
-          ctx.shadowBlur = 10 + fastPulse * 8;
-          ctx.shadowColor = nodeColor;
-          ctx.fillStyle = glowColor;
-          const haloR = 6 + fastPulse * 3;
-          ctx.beginPath();
-          ctx.arc(pt[0], pt[1], haloR, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Solid node (small square like the reference image)
+          // Solid node (small dot following face)
           ctx.shadowBlur = 4;
+          ctx.shadowColor = nodeColor;
           ctx.fillStyle = nodeColor;
-          const nodeSize = 2 + fastPulse * 1.2;
-          ctx.fillRect(
-            pt[0] - nodeSize / 2,
-            pt[1] - nodeSize / 2,
-            nodeSize,
-            nodeSize,
-          );
+          const nodeSize = 2.0 + fastPulse * 1; // Slightly larger dots for better visibility
+          ctx.fillRect(x - nodeSize / 2, y - nodeSize / 2, nodeSize, nodeSize);
         });
 
         ctx.shadowBlur = 0;
 
-        // ── HUD bounding corners ──
-        const cornerLength = 18;
+        // HUD Label Text (Optional: You can remove this block if you don't want the text above the face either)
         const pad = 22;
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = nodeColor;
-        ctx.shadowBlur = 12 + pulse * 10;
-        ctx.shadowColor = nodeColor;
-
-        // Top Left
-        ctx.beginPath();
-        ctx.moveTo(minX - pad, minY - pad + cornerLength);
-        ctx.lineTo(minX - pad, minY - pad);
-        ctx.lineTo(minX - pad + cornerLength, minY - pad);
-        ctx.stroke();
-        // Top Right
-        ctx.beginPath();
-        ctx.moveTo(maxX + pad - cornerLength, minY - pad);
-        ctx.lineTo(maxX + pad, minY - pad);
-        ctx.lineTo(maxX + pad, minY - pad + cornerLength);
-        ctx.stroke();
-        // Bottom Left
-        ctx.beginPath();
-        ctx.moveTo(minX - pad, maxY + pad - cornerLength);
-        ctx.lineTo(minX - pad, maxY + pad);
-        ctx.lineTo(minX - pad + cornerLength, maxY + pad);
-        ctx.stroke();
-        // Bottom Right
-        ctx.beginPath();
-        ctx.moveTo(maxX + pad - cornerLength, maxY + pad);
-        ctx.lineTo(maxX + pad, maxY + pad);
-        ctx.lineTo(maxX + pad, maxY + pad - cornerLength);
-        ctx.stroke();
-
-        ctx.shadowBlur = 0;
-
-        // HUD Label Text
         ctx.fillStyle = nodeColor;
         ctx.font = "bold 12px monospace";
         ctx.fillText(
@@ -259,27 +136,8 @@ export default function VideoFeed({
         );
       }
 
-      // DRAW YOLO OBJECTS (PHONE)
-      if (data) {
-        data.objects?.forEach((obj) => {
-          const [x1, y1, x2, y2] = obj.box;
-
-          // Draw pulsing red box for phone distraction
-          ctx.strokeStyle = "#ef4444";
-          ctx.lineWidth = 3;
-          ctx.setLineDash([5, 5]); // Dashed line for objects
-          ctx.beginPath();
-          ctx.rect(x1, y1, x2 - x1, y2 - y1);
-          ctx.stroke();
-          ctx.setLineDash([]); // Reset
-
-          ctx.fillStyle = "#ef4444";
-          ctx.fillRect(x1, y1 - 28, ctx.measureText(obj.label).width + 30, 28);
-          ctx.fillStyle = "#ffffff";
-          ctx.font = "bold 14px monospace";
-          ctx.fillText(obj.label.toUpperCase(), x1 + 8, y1 - 8);
-        });
-      }
+      // Note: YOLO Bounding boxes (Red Box) code completely removed here as requested.
+      // The backend will still detect the phone and trigger the audio/UI warnings.
     };
 
     animFrameRef.current = requestAnimationFrame(draw);
