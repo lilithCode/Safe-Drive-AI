@@ -31,7 +31,7 @@ export default function Dashboard() {
 
   const lastAlertTime = useRef<number>(0);
   const yawnFramesRef = useRef<number>(0);
-  const closedEyesFramesRef = useRef<number>(0); // New: Tracks consecutive frames eyes are closed
+  const closedEyesFramesRef = useRef<number>(0); // Tracks consecutive frames eyes are closed
   const penaltyFrames = useRef<number>(0);
   const safeFrames = useRef<number>(0);
   const driveStartTime = useRef<number>(Date.now());
@@ -50,7 +50,7 @@ export default function Dashboard() {
 
     const ws = new WebSocket("ws://localhost:8000/ws/video");
 
-    // Function that sends ONE frame
+    // Function sends ONE frame
     const sendNextFrame = () => {
       if (webcamRef.current && ws.readyState === WebSocket.OPEN) {
         const imageSrc = webcamRef.current.getScreenshot();
@@ -58,14 +58,14 @@ export default function Dashboard() {
           ws.send(imageSrc);
         } else {
           // If screenshot failed (e.g. video loading), try again shortly
-          setTimeout(sendNextFrame, 100);
+          setTimeout(sendNextFrame, 50);
         }
       }
     };
 
     ws.onopen = () => {
       setIsConnected(true);
-      sendNextFrame(); // Kick off the loop
+      sendNextFrame(); 
     };
 
     ws.onclose = () => setIsConnected(false);
@@ -77,23 +77,21 @@ export default function Dashboard() {
       if (rawData.yawning) yawnFramesRef.current += 1;
       else yawnFramesRef.current = 0;
 
-      // Blink vs Drowsy filter: Ignores normal blinks. Eyes must be closed for ~4 frames (400ms) to trigger.
+      // Blink vs Drowsy filter: Ignores normal blinks.
       if (rawData.drowsy) closedEyesFramesRef.current += 1;
       else closedEyesFramesRef.current = 0;
 
       const filteredData = {
         ...rawData,
         yawning: yawnFramesRef.current >= 2,
-        drowsy: closedEyesFramesRef.current >= 4, // Override raw drowsy with filtered drowsy
+        drowsy: closedEyesFramesRef.current >= 2, 
       };
 
       setAiData(filteredData);
       updateSafetyScore(filteredData);
       triggerAudioAlerts(filteredData);
 
-      // We received a reply! Wait 100ms, then request the next frame.
-      // This guarantees the backend will NEVER be overloaded.
-      setTimeout(sendNextFrame, 100);
+      setTimeout(sendNextFrame, 50);
     };
 
     return () => {
@@ -103,7 +101,6 @@ export default function Dashboard() {
 
   const handleInitialize = () => {
     setAppState("INITIALIZING");
-    // Fake loader just to mimic booting up components/warming up cameras safely
     setTimeout(() => {
       setAppState("READY");
     }, 2500);
@@ -161,7 +158,7 @@ export default function Dashboard() {
       }
       if (data.drowsy) {
         isUnsafe = true;
-        currentPenalty = 3;
+        currentPenalty = 4; 
       }
       if (data.phone_detected) {
         isUnsafe = true;
@@ -179,7 +176,7 @@ export default function Dashboard() {
       if (isUnsafe) {
         safeFrames.current = 0;
         penaltyFrames.current += 1;
-        if (penaltyFrames.current >= 3)
+        if (penaltyFrames.current >= 2)
           return Math.max(0, prev - currentPenalty);
         return prev;
       } else {
@@ -207,7 +204,7 @@ export default function Dashboard() {
   const triggerAudioAlerts = useCallback((data: AIResponse) => {
     const now = Date.now();
 
-    // GRACE PERIOD: Give the AI 5 seconds to boot up before triggering any warnings
+    // Give the 5 seconds to boot up before triggering any warnings
     if (now - driveStartTime.current < 5000) return;
     // Cooldown prevents spamming
     if (now - lastAlertTime.current < 4000) return;

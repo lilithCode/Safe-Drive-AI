@@ -29,7 +29,6 @@ export default function VideoFeed({
     aiDataRef.current = aiData;
   }, [aiData]);
 
-  // Single animation loop — runs continuously so the mesh is always animated
   useEffect(() => {
     let running = true;
 
@@ -61,14 +60,14 @@ export default function VideoFeed({
         data.landmarks &&
         data.landmarks.length > 0
       ) {
-        // INTERPOLATION: Smooth gliding
         if (
           !currentLandmarksRef.current ||
           currentLandmarksRef.current.length !== data.landmarks.length
         ) {
           currentLandmarksRef.current = data.landmarks.map((pt) => [...pt]);
         } else {
-          const ease = 0.5;
+        
+          const ease = 0.85;
           for (let i = 0; i < data.landmarks.length; i++) {
             currentLandmarksRef.current[i][0] +=
               (data.landmarks[i][0] - currentLandmarksRef.current[i][0]) * ease;
@@ -101,7 +100,6 @@ export default function VideoFeed({
 
         const nodeColor = `rgb(${r},${g},${b})`;
 
-        // Scanline sweep
         ctx.shadowBlur = 0;
         const scanGrad = ctx.createLinearGradient(0, scanY - 40, 0, scanY + 40);
         scanGrad.addColorStop(0, `rgba(${r},${g},${b},0)`);
@@ -116,8 +114,6 @@ export default function VideoFeed({
           maxY = -Infinity;
 
         interpolatedLandmarks.forEach((pt) => {
-          // Changed pt[0] mapping to fix the opposite side mesh glitch!
-          // We directly map the X coordinate since react-webcam screenshot orientation matches it perfectly.
           const x = pt[0] * canvas.width;
           const y = pt[1] * canvas.height;
 
@@ -205,7 +201,8 @@ export default function VideoFeed({
           audio={false}
           mirrored={true}
           screenshotFormat="image/jpeg"
-          videoConstraints={{ facingMode: "user", width: 1280, height: 720 }}
+          screenshotQuality={0.5} 
+          videoConstraints={{ facingMode: "user", width: 640, height: 360 }}
           className="absolute w-full h-full object-cover opacity-80"
         />
         <canvas
