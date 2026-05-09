@@ -7,12 +7,12 @@ mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(
     max_num_faces=1,
     refine_landmarks=True,
-    min_detection_confidence=0.5, 
+    min_detection_confidence=0.5,
     min_tracking_confidence=0.5
 )
 
 # Initialize YOLOv8 for Object Detection (Auto-downloads yolov8n.pt on first run)
-yolo_model = YOLO("yolov8n.pt") 
+yolo_model = YOLO("yolov8n.pt")
 
 # Specific Landmark Indices from MediaPipe FaceMesh
 RIGHT_EYE = [33, 160, 158, 133, 153, 144]
@@ -28,7 +28,7 @@ FACE_RIGHT_EDGE = 454
 def calculate_distance(p1, p2):
     return math.dist(p1, p2)
 
-# EAR = Eye Aspect Ratio , when awaken usually around 0.3-0.4, when drowsy below 0.22
+# EAR = Eye Aspect Ratio, when awaken usually around 0.3-0.4, when drowsy below 0.22
 def calculate_ear(eye_landmarks, all_landmarks, w, h):
     # Map indices to pixel coordinates
     pts = [(all_landmarks[i].x * w, all_landmarks[i].y * h) for i in eye_landmarks]
@@ -37,9 +37,9 @@ def calculate_ear(eye_landmarks, all_landmarks, w, h):
     v2 = calculate_distance(pts[2], pts[4])
     # Horizontal distance
     h_dist = calculate_distance(pts[0], pts[3])
-    return (v1 + v2) / (2.0 * h_dist + 1e-6) 
+    return (v1 + v2) / (2.0 * h_dist + 1e-6)
 
-# MAR = Mouth Aspect Ratio , when yawning usually around 0.5-0.6, when not yawning below 0.3
+# MAR = Mouth Aspect Ratio, when yawning usually around 0.5-0.6, when not yawning below 0.3
 def calculate_mar(all_landmarks, w, h):
     top = (all_landmarks[INNER_LIP_TOP].x * w, all_landmarks[INNER_LIP_TOP].y * h)
     bottom = (all_landmarks[INNER_LIP_BOTTOM].x * w, all_landmarks[INNER_LIP_BOTTOM].y * h)
@@ -77,18 +77,18 @@ def process_frame(frame: np.ndarray):
         "mar": 0.0,
         "landmarks": []
     }
-
+    
     # Convert BGR to RGB for MediaPipe processing as MediaPipe expects RGB input and OpenCV uses BGR by default
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(rgb_frame) 
-
+    results = face_mesh.process(rgb_frame)
+    
     if results.multi_face_landmarks:
         response["face_detected"] = True
         landmarks = results.multi_face_landmarks[0].landmark
         
         # save all landmarks as pixel coordinates for drawing a mesh later in React
-        response["landmarks"] = [[int(lm.x * w), int(lm.y * h)] for lm in landmarks]
-
+        response["landmarks"] = [[lm.x, lm.y] for lm in landmarks]
+        
         # Calculate EAR
         left_ear = calculate_ear(LEFT_EYE, landmarks, w, h)
         right_ear = calculate_ear(RIGHT_EYE, landmarks, w, h)
@@ -96,13 +96,13 @@ def process_frame(frame: np.ndarray):
         response["ear"] = avg_ear
         if avg_ear < 0.22: # Threshold for closed eyes
             response["drowsy"] = True
-
+            
         # Calculate MAR
         mar = calculate_mar(landmarks, w, h)
         response["mar"] = mar
-        if mar > 0.5: # Threshold for yawning
+        if mar > 0.4: # Threshold for yawning
             response["yawning"] = True
-
+            
         # Calculate Head Pose
         response["head_distracted"] = check_head_pose(landmarks, w, h)
 
@@ -127,5 +127,5 @@ def process_frame(frame: np.ndarray):
             
             if label == "cell phone":
                 response["phone_detected"] = True
-
+                
     return response

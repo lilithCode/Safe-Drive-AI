@@ -38,7 +38,7 @@ export default function DetectionStatus({
           isBad={aiData?.yawning}
           badText="Detected"
           goodText="None"
-          warning={aiData?.mar && aiData.mar > 0.4 && !aiData.yawning}
+          warning={aiData?.mar && aiData.mar > 0.35 && !aiData.yawning}
           warnText="Talking"
         />
       </div>

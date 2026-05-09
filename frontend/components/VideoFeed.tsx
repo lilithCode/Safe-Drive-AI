@@ -21,9 +21,9 @@ export default function VideoFeed({
   driveTime,
   safetyScore,
 }: Props) {
-  // Store latest aiData in a ref so the animation loop always reads fresh values
   const aiDataRef = useRef<AIResponse | null>(null);
   const animFrameRef = useRef<number>(0);
+  const currentLandmarksRef = useRef<Array<[number, number]> | null>(null);
 
   useEffect(() => {
     aiDataRef.current = aiData;
@@ -41,51 +41,67 @@ export default function VideoFeed({
       const video = webcamRef.current?.video;
       const data = aiDataRef.current;
 
-      // Ensure video is fully loaded before drawing to prevent aspect ratio desync
       if (!canvas || !video || !video.videoWidth) return;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      // Match canvas dimensions exactly to video to ensure object-cover CSS aligns perfectly
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      if (
+        canvas.width !== video.videoWidth ||
+        canvas.height !== video.videoHeight
+      ) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // DRAW FACE GRID MESH (Full Dots Only)
       if (
         data &&
         data.face_detected &&
         data.landmarks &&
         data.landmarks.length > 0
       ) {
-        // Determine dynamic color based on driver status
+        // INTERPOLATION: Smooth gliding
+        if (
+          !currentLandmarksRef.current ||
+          currentLandmarksRef.current.length !== data.landmarks.length
+        ) {
+          currentLandmarksRef.current = data.landmarks.map((pt) => [...pt]);
+        } else {
+          const ease = 0.5;
+          for (let i = 0; i < data.landmarks.length; i++) {
+            currentLandmarksRef.current[i][0] +=
+              (data.landmarks[i][0] - currentLandmarksRef.current[i][0]) * ease;
+            currentLandmarksRef.current[i][1] +=
+              (data.landmarks[i][1] - currentLandmarksRef.current[i][1]) * ease;
+          }
+        }
+
+        const interpolatedLandmarks = currentLandmarksRef.current;
+
         const isDanger = data.drowsy || data.phone_detected;
         const isWarning = data.head_distracted || data.yawning;
 
-        // Animation time drivers
         const now = Date.now();
-        const fastPulse = Math.sin(now / 180) * 0.5 + 0.5; // 0..1 fast pulse
-        const scanY = (now / 12) % canvas.height; // Scanline Y position
+        const fastPulse = Math.sin(now / 180) * 0.5 + 0.5;
+        const scanY = (now / 12) % canvas.height;
 
-        // Base colors
         let r = 16,
           g = 185,
-          b = 129; // Safe: Emerald Green
+          b = 129;
         if (isDanger) {
           r = 239;
           g = 68;
           b = 68;
-        } // Danger: Red
-        else if (isWarning) {
+        } else if (isWarning) {
           r = 234;
           g = 179;
           b = 8;
-        } // Warning: Yellow
+        }
 
         const nodeColor = `rgb(${r},${g},${b})`;
 
-        // ── Draw scanline sweep across the mesh ──
+        // Scanline sweep
         ctx.shadowBlur = 0;
         const scanGrad = ctx.createLinearGradient(0, scanY - 40, 0, scanY + 40);
         scanGrad.addColorStop(0, `rgba(${r},${g},${b},0)`);
@@ -94,34 +110,30 @@ export default function VideoFeed({
         ctx.fillStyle = scanGrad;
         ctx.fillRect(0, scanY - 40, canvas.width, 80);
 
-        // ── Draw ALL 468 nodes for a full point-cloud look ──
         let minX = Infinity,
           minY = Infinity,
           maxX = -Infinity,
           maxY = -Infinity;
 
-        data.landmarks.forEach((pt) => {
-          // NO math needed here. The webcam mirror and backend data already perfectly align.
-          const x = pt[0];
-          const y = pt[1];
+        interpolatedLandmarks.forEach((pt) => {
+          // Changed pt[0] mapping to fix the opposite side mesh glitch!
+          // We directly map the X coordinate since react-webcam screenshot orientation matches it perfectly.
+          const x = pt[0] * canvas.width;
+          const y = pt[1] * canvas.height;
 
-          // Track boundaries for the HUD Box
           if (x < minX) minX = x;
           if (y < minY) minY = y;
           if (x > maxX) maxX = x;
           if (y > maxY) maxY = y;
 
-          // Solid node (small dot following face)
           ctx.shadowBlur = 4;
           ctx.shadowColor = nodeColor;
           ctx.fillStyle = nodeColor;
-          const nodeSize = 2.0 + fastPulse * 1; // Slightly larger dots for better visibility
+          const nodeSize = 2.0 + fastPulse * 1;
           ctx.fillRect(x - nodeSize / 2, y - nodeSize / 2, nodeSize, nodeSize);
         });
 
         ctx.shadowBlur = 0;
-
-        // HUD Label Text (Optional: You can remove this block if you don't want the text above the face either)
         const pad = 22;
         ctx.fillStyle = nodeColor;
         ctx.font = "bold 12px monospace";
@@ -134,10 +146,9 @@ export default function VideoFeed({
           minX - pad,
           minY - pad - 8,
         );
+      } else {
+        currentLandmarksRef.current = null;
       }
-
-      // Note: YOLO Bounding boxes (Red Box) code completely removed here as requested.
-      // The backend will still detect the phone and trigger the audio/UI warnings.
     };
 
     animFrameRef.current = requestAnimationFrame(draw);
@@ -159,15 +170,13 @@ export default function VideoFeed({
           </div>
         )}
 
-        {/* Live Feed Status Overlay */}
         <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-zinc-700">
-          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
           <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">
-            Live Mesh · 4 FPS
+            Live Stream Sync
           </span>
         </div>
 
-        {/* Real-time metrics overlay on video */}
         <div className="absolute bottom-4 left-4 z-20 flex gap-2">
           <div className="bg-black/70 backdrop-blur-md px-3 py-2 rounded-lg border border-zinc-700">
             <span className="text-xs text-zinc-400 block font-mono">
@@ -197,7 +206,7 @@ export default function VideoFeed({
           mirrored={true}
           screenshotFormat="image/jpeg"
           videoConstraints={{ facingMode: "user", width: 1280, height: 720 }}
-          className="absolute w-full h-full object-cover opacity-80" // Slightly dimmed so the mesh pops out!
+          className="absolute w-full h-full object-cover opacity-80"
         />
         <canvas
           ref={canvasRef}
@@ -205,7 +214,6 @@ export default function VideoFeed({
         />
       </div>
 
-      {/* Quick Stats Row underneath video */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
           title="Safety score"
