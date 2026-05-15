@@ -69,3 +69,5 @@ next-env.d.ts
 .DS_Store
 *.pem
 .vercel
+whatsapp-bridge/.wwebjs_auth/
+whatsapp-bridge/.wwebjs_cache/

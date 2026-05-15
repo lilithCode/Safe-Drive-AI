@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import Webcam from "react-webcam";
 import { AIResponse } from "../types";
+import { Zap, Timer, AlertCircle, ShieldCheck } from "lucide-react";
 
 interface Props {
   webcamRef: React.RefObject<Webcam>;
@@ -29,7 +30,6 @@ export default function VideoFeed({
     aiDataRef.current = aiData;
   }, [aiData]);
 
-  // Single animation loop — runs continuously so the mesh is always animated
   useEffect(() => {
     let running = true;
 
@@ -46,108 +46,74 @@ export default function VideoFeed({
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      if (
-        canvas.width !== video.videoWidth ||
-        canvas.height !== video.videoHeight
-      ) {
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
       }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (
-        data &&
-        data.face_detected &&
-        data.landmarks &&
-        data.landmarks.length > 0
-      ) {
-        // INTERPOLATION: Smooth gliding
-        if (
-          !currentLandmarksRef.current ||
-          currentLandmarksRef.current.length !== data.landmarks.length
-        ) {
+      if (data && data.face_detected && data.landmarks && data.landmarks.length > 0) {
+        if (!currentLandmarksRef.current || currentLandmarksRef.current.length !== data.landmarks.length) {
           currentLandmarksRef.current = data.landmarks.map((pt) => [...pt]);
         } else {
-          const ease = 0.5;
+          const ease = 0.4;
           for (let i = 0; i < data.landmarks.length; i++) {
-            currentLandmarksRef.current[i][0] +=
-              (data.landmarks[i][0] - currentLandmarksRef.current[i][0]) * ease;
-            currentLandmarksRef.current[i][1] +=
-              (data.landmarks[i][1] - currentLandmarksRef.current[i][1]) * ease;
+            currentLandmarksRef.current[i][0] += (data.landmarks[i][0] - currentLandmarksRef.current[i][0]) * ease;
+            currentLandmarksRef.current[i][1] += (data.landmarks[i][1] - currentLandmarksRef.current[i][1]) * ease;
           }
         }
 
         const interpolatedLandmarks = currentLandmarksRef.current;
-
         const isDanger = data.drowsy || data.phone_detected;
         const isWarning = data.head_distracted || data.yawning;
 
-        const now = Date.now();
-        const fastPulse = Math.sin(now / 180) * 0.5 + 0.5;
-        const scanY = (now / 12) % canvas.height;
+        // Theme colors for Canvas (Refined Palette)
+        const amberAccent = "#E8B06F"; 
+        const warmRed = "#D9534F";  
+        const sageGreen = "#A3B18A"; 
 
-        let r = 16,
-          g = 185,
-          b = 129;
+        const now = Date.now();
+        const fastPulse = Math.sin(now / 200) * 0.5 + 0.5;
+        const scanY = (now / 15) % canvas.height;
+
+        let activeColor = sageGreen;
+        let labelText = "FOCUS_OPTIMAL";
+
         if (isDanger) {
-          r = 239;
-          g = 68;
-          b = 68;
+          activeColor = warmRed;
+          labelText = "CRITICAL_INTERVENTION";
         } else if (isWarning) {
-          r = 234;
-          g = 179;
-          b = 8;
+          activeColor = amberAccent;
+          labelText = "DISTRACTION_DETECTED";
         }
 
-        const nodeColor = `rgb(${r},${g},${b})`;
-
-        // Scanline sweep
-        ctx.shadowBlur = 0;
-        const scanGrad = ctx.createLinearGradient(0, scanY - 40, 0, scanY + 40);
-        scanGrad.addColorStop(0, `rgba(${r},${g},${b},0)`);
-        scanGrad.addColorStop(0.5, `rgba(${r},${g},${b},0.18)`);
-        scanGrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        // 1. Scanline Sweep
+        const scanGrad = ctx.createLinearGradient(0, scanY - 60, 0, scanY + 60);
+        scanGrad.addColorStop(0, `rgba(0,0,0,0)`);
+        scanGrad.addColorStop(0.5, `${activeColor}33`); 
+        scanGrad.addColorStop(1, `rgba(0,0,0,0)`);
         ctx.fillStyle = scanGrad;
-        ctx.fillRect(0, scanY - 40, canvas.width, 80);
+        ctx.fillRect(0, scanY - 60, canvas.width, 120);
 
-        let minX = Infinity,
-          minY = Infinity,
-          maxX = -Infinity,
-          maxY = -Infinity;
+        // 2. Draw Landmarks with Glow
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = activeColor;
+        ctx.fillStyle = activeColor;
 
         interpolatedLandmarks.forEach((pt) => {
-          // Changed pt[0] mapping to fix the opposite side mesh glitch!
-          // We directly map the X coordinate since react-webcam screenshot orientation matches it perfectly.
           const x = pt[0] * canvas.width;
           const y = pt[1] * canvas.height;
-
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-
-          ctx.shadowBlur = 4;
-          ctx.shadowColor = nodeColor;
-          ctx.fillStyle = nodeColor;
-          const nodeSize = 2.0 + fastPulse * 1;
-          ctx.fillRect(x - nodeSize / 2, y - nodeSize / 2, nodeSize, nodeSize);
+          const nodeSize = 1.8 + fastPulse * 1.2;
+          ctx.beginPath();
+          ctx.arc(x, y, nodeSize / 2, 0, Math.PI * 2);
+          ctx.fill();
         });
 
+        // 3. Label HUD
         ctx.shadowBlur = 0;
-        const pad = 22;
-        ctx.fillStyle = nodeColor;
-        ctx.font = "bold 12px monospace";
-        ctx.fillText(
-          isDanger
-            ? "DANGER_DETECTED"
-            : isWarning
-              ? "WARNING_STATE"
-              : "TRACKING_ACTIVE",
-          minX - pad,
-          minY - pad - 8,
-        );
-      } else {
-        currentLandmarksRef.current = null;
+        ctx.fillStyle = activeColor;
+        ctx.font = "bold 10px monospace";
+        ctx.fillText(`>> ${labelText}`, 20, 30);
       }
     };
 
@@ -159,42 +125,36 @@ export default function VideoFeed({
   }, [canvasRef, webcamRef]);
 
   return (
-    <div className="bg-[#1e1e1e] rounded-2xl border border-zinc-800 p-4 shadow-xl">
-      <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden bg-black mb-4">
+    <div className="bg-[#3D2B1F] rounded-2xl border border-[#4D392C] p-2 sm:p-4 shadow-2xl transition-all duration-500">
+      <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden bg-black shadow-inner ring-1 ring-[#4D392C]">
+        
+        {/* Emergency Overlay */}
         {isEmergency && (
-          <div className="absolute inset-0 bg-red-900/90 flex flex-col items-center justify-center text-white z-30">
-            <h2 className="text-4xl font-bold mb-2 animate-pulse">
-              SOS ACTIVE
-            </h2>
-            <p className="text-zinc-300">Emergency contacts notified.</p>
+          <div className="absolute inset-0 bg-[#D9534F]/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-40 transition-all">
+            <h2 className="text-3xl sm:text-5xl font-black tracking-[0.3em] animate-pulse">SOS ACTIVE</h2>
+            <p className="text-[10px] font-bold tracking-widest mt-2 opacity-80 uppercase">Broadcasting GPS & Telemetry</p>
           </div>
         )}
 
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-zinc-700">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-          <span className="text-xs font-semibold text-zinc-200 uppercase tracking-wider">
-            Live Stream Sync
+        {/* HUD Top Left: Status */}
+        <div className="absolute top-4 left-4 z-30 flex items-center gap-3 bg-black/40 backdrop-blur-xl px-4 py-2 rounded-lg border border-white/10">
+          <div className={`w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px] ${aiData?.face_detected ? 'bg-[#A3B18A] shadow-[#A3B18A]' : 'bg-[#D9534F] shadow-[#D9534F]'}`}></div>
+          <span className="text-[9px] font-bold text-white/90 uppercase tracking-[0.2em]">
+            {aiData?.face_detected ? "Visual Link: Active" : "Visual Link: Lost"}
           </span>
         </div>
 
-        <div className="absolute bottom-4 left-4 z-20 flex gap-2">
-          <div className="bg-black/70 backdrop-blur-md px-3 py-2 rounded-lg border border-zinc-700">
-            <span className="text-xs text-zinc-400 block font-mono">
-              EAR_INDEX
-            </span>
-            <span
-              className={`font-mono text-sm ${aiData?.drowsy ? "text-red-400" : "text-green-400"}`}
-            >
+        {/* HUD Bottom Left: Telemetry */}
+        <div className="absolute bottom-4 left-4 z-30 flex gap-2">
+          <div className="bg-black/40 backdrop-blur-xl px-3 py-2 rounded-lg border border-white/5 flex flex-col items-center min-w-[60px]">
+            <span className="text-[8px] text-[#BFA899] font-bold uppercase tracking-tighter">EAR</span>
+            <span className={`font-mono text-xs font-bold ${aiData?.drowsy ? "text-[#D9534F]" : "text-[#E8B06F]"}`}>
               {aiData?.ear?.toFixed(2) || "0.00"}
             </span>
           </div>
-          <div className="bg-black/70 backdrop-blur-md px-3 py-2 rounded-lg border border-zinc-700">
-            <span className="text-xs text-zinc-400 block font-mono">
-              MAR_INDEX
-            </span>
-            <span
-              className={`font-mono text-sm ${aiData?.yawning ? "text-yellow-400" : "text-blue-400"}`}
-            >
+          <div className="bg-black/40 backdrop-blur-xl px-3 py-2 rounded-lg border border-white/5 flex flex-col items-center min-w-[60px]">
+            <span className="text-[8px] text-[#BFA899] font-bold uppercase tracking-tighter">MAR</span>
+            <span className={`font-mono text-xs font-bold ${aiData?.yawning ? "text-[#E8B06F]" : "text-[#BFA899]"}`}>
               {aiData?.mar?.toFixed(2) || "0.00"}
             </span>
           </div>
@@ -206,59 +166,33 @@ export default function VideoFeed({
           mirrored={true}
           screenshotFormat="image/jpeg"
           videoConstraints={{ facingMode: "user", width: 1280, height: 720 }}
-          className="absolute w-full h-full object-cover opacity-80"
+          className="absolute w-full h-full object-cover opacity-60 mix-blend-screen grayscale-[20%]"
         />
-        <canvas
-          ref={canvasRef}
-          className="absolute top-0 left-0 w-full h-full object-cover z-10"
-        />
+        
+        <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full object-cover z-20" />
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard
-          title="Safety score"
-          value={`${Math.round(safetyScore)}%`}
-          color={
-            safetyScore > 80
-              ? "text-green-500"
-              : safetyScore > 50
-                ? "text-yellow-500"
-                : "text-red-500"
-          }
-        />
-        <StatCard
-          title="EAR value"
-          value={aiData?.ear?.toFixed(2) || "0.00"}
-          color="text-zinc-200"
-        />
-        <StatCard
-          title="Alerts today"
-          value={alertsToday}
-          color={alertsToday > 0 ? "text-red-400" : "text-zinc-200"}
-        />
-        <StatCard
-          title="Drive time"
-          value={`${driveTime} min`}
-          color="text-blue-400"
-        />
+      {/* Bottom Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+        <StatCard icon={<ShieldCheck size={14}/>} title="Safety Index" value={`${Math.round(safetyScore)}%`} accent={safetyScore < 50 ? "#D9534F" : "#E8B06F"} />
+        <StatCard icon={<AlertCircle size={14}/>} title="Alerts Triggered" value={alertsToday} accent={alertsToday > 5 ? "#D9534F" : "#FFFFFF"} />
+        <StatCard icon={<Timer size={14}/>} title="Session Time" value={`${driveTime}m`} />
+        <StatCard icon={<Zap size={14}/>} title="AI Latency" value="32ms" accent="#A3B18A" />
       </div>
     </div>
   );
 }
 
-function StatCard({
-  title,
-  value,
-  color,
-}: {
-  title: string;
-  value: string | number;
-  color: string;
-}) {
+function StatCard({ icon, title, value, accent }: any) {
   return (
-    <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
-      <div className={`text-2xl font-semibold mb-1 ${color}`}>{value}</div>
-      <div className="text-xs text-zinc-500 font-medium">{title}</div>
+    <div className="bg-[#2A1E16]/40 p-4 rounded-xl border border-[#4D392C] flex flex-col gap-1 hover:border-[#E8B06F]/30 transition-all group">
+      <div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+        <span className="text-[#E8B06F]">{icon}</span>
+        <span className="text-[9px] font-bold text-[#BFA899] uppercase tracking-widest">{title}</span>
+      </div>
+      <div className="text-xl font-black tracking-tight" style={{ color: accent || "#FFFFFF" }}>
+        {value}
+      </div>
     </div>
   );
 }

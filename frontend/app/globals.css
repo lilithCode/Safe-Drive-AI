@@ -1,8 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Branding Refined from Image */
+  --background: #F2E8D9;      /* The soft cream background behind the cards */
+  --card: #3D2B1F;            /* The deep chocolate brown of the main panels */
+  --accent: #E8B06F;          /* The warm amber used for bars and highlights */
+  --accent-soft: #8C6A53;     /* The muted, desaturated brown for secondary bars */
+  --text-primary: #FFFFFF;    /* White text used inside the dark cards */
+  --text-secondary: #BFA899;  /* The tan/taupe text for labels and muted info */
+  --border: #4D392C;          /* Slightly lighter brown for inner dividers */
+  
+  /* Functional Colors (Adjusted for the Warm Theme) */
+  --alert: #D9534F;           /* A slightly desaturated red to match the warmth */
+  --success: #A3B18A;         /* An olive/sage green that fits the earth tones */
+  
+  /* UI Elements */
+  --sidebar-active: #4F3829;  /* The subtle highlight for active menu items */
+  --graph-fill: rgba(232, 176, 111, 0.2); /* Transparent amber for area charts */
+}
+
+/* Optional: Smooth transitions for theme changes */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 @theme inline {
@@ -12,15 +31,15 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
-}
+} */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-space), sans-serif;
 }
