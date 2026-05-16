@@ -12,7 +12,6 @@
 
 # app = FastAPI()
 
-# # --- CORS SETTINGS ---
 # app.add_middleware(
 #     CORSMiddleware,
 #     allow_origins=["*"],
@@ -21,21 +20,18 @@
 #     allow_headers=["*"],
 # )
 
-# # --- DATA MODELS ---
 # class SOSPayload(BaseModel):
 #     latitude: Optional[float] = None
 #     longitude: Optional[float] = None
 #     guardian_number: str
 #     driver_name: str
 #     image: Optional[str] = None
-#     video: Optional[str] = None # NEW
-#     is_follow_up: bool = False  # Allows frontend to send just images without re-sending text
+#     video: Optional[str] = None
+#     is_follow_up: bool = False
 
-# # --- AI VIDEO WEBSOCKET ---
 # @app.websocket("/ws/video")
 # async def video_endpoint(websocket: WebSocket):
 #     await websocket.accept()
-#     print("Frontend connected to WebSocket.")
 #     try:
 #         while True:
 #             data = await websocket.receive_text()
@@ -43,78 +39,45 @@
 #             img_bytes = base64.b64decode(encoded)
 #             np_arr = np.frombuffer(img_bytes, np.uint8)
 #             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            
-#             if frame is None:
-#                 continue
-
+#             if frame is None: continue
 #             ai_data = process_frame(frame)
 #             await websocket.send_text(json.dumps(ai_data))
-            
-#     except WebSocketDisconnect:
-#         print("Frontend disconnected.")
-#     except Exception as e:
-#         print(f"Error processing frame: {e}")
+#     except Exception as e: print(f"Socket Error: {e}")
 
-# # --- WHATSAPP SOS ENDPOINT ---
 # @app.post("/api/sos/whatsapp")
 # async def trigger_whatsapp_sos(payload: SOSPayload):
 #     async with httpx.AsyncClient(timeout=60.0) as client:
 #         try:
-#             # 1. ONLY send the Text Alert if it's the FIRST message
 #             if not payload.is_follow_up:
 #                 lat, lng = payload.latitude, payload.longitude
 #                 loc_source = "Browser GPS"
-
-#                 if lat is None or lng is None:
+#                 if lat is None:
 #                     try:
 #                         ip_res = await client.get("http://ip-api.com/json/", timeout=5.0)
 #                         ip_data = ip_res.json()
-#                         if ip_data.get("status") == "success":
-#                             lat, lng = ip_data.get("lat"), ip_data.get("lon")
-#                             loc_source = "Network IP (Approximate)"
+#                         lat, lng, loc_source = ip_data.get("lat"), ip_data.get("lon"), "Network IP"
 #                     except: pass
 
 #                 maps_link = f"https://www.google.com/maps?q={lat},{lng}" if lat else "Unavailable"
-                
-#                 message = (
-#                     f"🚨 *SAFE-DRIVE AI EMERGENCY* 🚨\n\n"
-#                     f"Driver: *{payload.driver_name}*\n"
-#                     f"Status: *CRITICAL ALERT*\n"
-#                     f"📍 Location ({loc_source}):\n{maps_link}\n\n"
-#                     f"Please check on the driver immediately. Sequential snapshots follow."
-#                 )
-
-#                 # Send the text alert
-#                 await client.post("http://localhost:3001/send-alert", json={
-#                     "number": payload.guardian_number,
-#                     "message": message
-#                 })
-#                 # Short delay to separate text from the first image
+#                 message = f"🚨 *SAFE-DRIVE AI EMERGENCY* 🚨\n\nDriver: *{payload.driver_name}*\nStatus: *CRITICAL*\n📍 Location ({loc_source}): {maps_link}"
+#                 await client.post("http://localhost:3001/send-alert", json={"number": payload.guardian_number, "message": message})
 #                 await asyncio.sleep(1.0)
 
-#             # 2. ALWAYS send the Image if provided in the payload
 #             if payload.image:
-#                 print(f"Sending {'follow-up' if payload.is_follow_up else 'initial'} image to bridge...")
 #                 await client.post("http://localhost:3001/send-image", json={
-#                     "number": payload.guardian_number,
-#                     "image": payload.image,
+#                     "number": payload.guardian_number, "image": payload.image,
 #                     "caption": "📸 Emergency Snapshot"
 #                 })
 
-
-        
-
 #             if payload.video:
-#                 print("Sending 5s video clip to bridge...")
+#                 print("Sending video clip...")
 #                 await client.post("http://localhost:3001/send-video", json={
-#                     "number": payload.guardian_number,
-#                     "video": payload.video,
-#                     "caption": "📹 5-Second Emergency Video Feed"
+#                     "number": payload.guardian_number, "video": payload.video,
+#                     "caption": "📹 5-Second Video Feed"
 #                 })
 
 #             return {"success": True}
 #         except Exception as e:
-#             print(f"SOS Error: {e}")
 #             return {"success": False, "error": str(e)}
 
 # if __name__ == "__main__":
@@ -136,6 +99,7 @@ import asyncio
 
 app = FastAPI()
 
+# --- CORS SETTINGS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -144,7 +108,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- DATA MODELS ---
 class SOSPayload(BaseModel):
+    id: str  # The unique Driver Phone Number
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     guardian_number: str
@@ -153,6 +119,7 @@ class SOSPayload(BaseModel):
     video: Optional[str] = None
     is_follow_up: bool = False
 
+# --- AI VIDEO WEBSOCKET ---
 @app.websocket("/ws/video")
 async def video_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -168,10 +135,15 @@ async def video_endpoint(websocket: WebSocket):
             await websocket.send_text(json.dumps(ai_data))
     except Exception as e: print(f"Socket Error: {e}")
 
+# --- MULTI-USER WHATSAPP SOS ENDPOINT ---
 @app.post("/api/sos/whatsapp")
 async def trigger_whatsapp_sos(payload: SOSPayload):
+    # Bridge URL
+    BRIDGE_URL = "http://localhost:3001"
+    
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
+            # 1. First Packet Logic (Text + Location)
             if not payload.is_follow_up:
                 lat, lng = payload.latitude, payload.longitude
                 loc_source = "Browser GPS"
@@ -184,24 +156,36 @@ async def trigger_whatsapp_sos(payload: SOSPayload):
 
                 maps_link = f"https://www.google.com/maps?q={lat},{lng}" if lat else "Unavailable"
                 message = f"🚨 *SAFE-DRIVE AI EMERGENCY* 🚨\n\nDriver: *{payload.driver_name}*\nStatus: *CRITICAL*\n📍 Location ({loc_source}): {maps_link}"
-                await client.post("http://localhost:3001/send-alert", json={"number": payload.guardian_number, "message": message})
+                
+                # Send Text (Pass 'id' so bridge knows which WA account to use)
+                await client.post(f"{BRIDGE_URL}/send-alert", json={
+                    "id": payload.id, 
+                    "number": payload.guardian_number, 
+                    "message": message
+                })
                 await asyncio.sleep(1.0)
 
+            # 2. Send Image (Sequential or Initial)
             if payload.image:
-                await client.post("http://localhost:3001/send-image", json={
-                    "number": payload.guardian_number, "image": payload.image,
+                await client.post(f"{BRIDGE_URL}/send-image", json={
+                    "id": payload.id,
+                    "number": payload.guardian_number,
+                    "image": payload.image,
                     "caption": "📸 Emergency Snapshot"
                 })
 
+            # 3. Send Video
             if payload.video:
-                print("Sending video clip...")
-                await client.post("http://localhost:3001/send-video", json={
-                    "number": payload.guardian_number, "video": payload.video,
+                await client.post(f"{BRIDGE_URL}/send-video", json={
+                    "id": payload.id,
+                    "number": payload.guardian_number,
+                    "video": payload.video,
                     "caption": "📹 5-Second Video Feed"
                 })
 
             return {"success": True}
         except Exception as e:
+            print(f"SOS Error: {e}")
             return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":
