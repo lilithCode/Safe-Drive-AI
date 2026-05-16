@@ -4,7 +4,6 @@
 // import Webcam from "react-webcam";
 // import { AIResponse } from "../types";
 
-// // GSAP
 // import gsap from "gsap";
 // import { useGSAP } from "@gsap/react";
 
@@ -17,10 +16,6 @@
 // import StartScreen from "../components/StartScreen";
 // import SettingsPanel from "../components/SettingsPanel";
 
-// // -----------------------------
-// // MEMOIZED COMPONENTS
-// // Prevent unnecessary rerenders
-// // -----------------------------
 // const MemoHeader = memo(Header);
 // const MemoVideoFeed = memo(VideoFeed);
 // const MemoSafetyScore = memo(SafetyScore);
@@ -33,16 +28,11 @@
 //   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 //   const webcamRef = useRef<Webcam>(null);
 //   const canvasRef = useRef<HTMLCanvasElement>(null);
-
 //   const wsRef = useRef<WebSocket | null>(null);
 
-//   const [appState, setAppState] = useState<
-//     "IDLE" | "INITIALIZING" | "READY" | "DRIVING"
-//   >("IDLE");
-
+//   const [appState, setAppState] = useState<"IDLE" | "INITIALIZING" | "READY" | "DRIVING">("IDLE");
 //   const [isConnected, setIsConnected] = useState(false);
 //   const [isEmergency, setIsEmergency] = useState(false);
-
 //   const [aiData, setAiData] = useState<AIResponse | null>(null);
 
 //   const [safetyScore, setSafetyScore] = useState(100);
@@ -50,302 +40,124 @@
 //   const [driveTime, setDriveTime] = useState(0);
 //   const [alertLogs, setAlertLogs] = useState<any[]>([]);
 
-//   // ----------------------------------------
-//   // SUPER SMOOTH GSAP ENTRANCE
-//   // ----------------------------------------
-//   useGSAP(
-//     () => {
-//       if (appState !== "DRIVING") return;
+//   useGSAP(() => {
+//     if (appState !== "DRIVING") return;
+//     gsap.set(".dashboard-animate", { opacity: 0, y: 30 });
+//     gsap.to(".dashboard-animate", { opacity: 1, y: 0, stagger: 0.06, ease: "power3.out", duration: 0.9 });
+//   }, { dependencies: [appState], scope: containerRef });
 
-//       // Kill old animations
-//       gsap.killTweensOf(".dashboard-animate");
-
-//       // Set initial state
-//       gsap.set(".dashboard-animate", {
-//         opacity: 0,
-//         y: 30,
-//         willChange: "transform, opacity",
-//       });
-
-//       // Optimized timeline
-//       const tl = gsap.timeline({
-//         defaults: {
-//           ease: "power3.out",
-//           duration: 0.9,
-//         },
-//       });
-
-//       tl.to(".dashboard-animate", {
-//         opacity: 1,
-//         y: 0,
-//         stagger: 0.06,
-//         clearProps: "willChange",
-//       });
-//     },
-//     {
-//       dependencies: [appState],
-//       scope: containerRef,
-//     }
-//   );
-
-//   // ----------------------------------------
-//   // WEBSOCKET LOGIC
-//   // Optimized for less stress
-//   // ----------------------------------------
 //   useEffect(() => {
 //     if (appState !== "DRIVING" || isEmergency) return;
-
-//     // Delay websocket slightly so animation finishes first
-//     const connectDelay = setTimeout(() => {
-//       const ws = new WebSocket("ws://localhost:8000/ws/video");
-
-//       wsRef.current = ws;
-
-//       const sendNextFrame = () => {
-//         if (
-//           webcamRef.current &&
-//           ws.readyState === WebSocket.OPEN
-//         ) {
-//           const imageSrc = webcamRef.current.getScreenshot();
-
-//           if (imageSrc) {
-//             ws.send(imageSrc);
-//           }
-
-//           // Slightly slower = MUCH smoother UI
-//           setTimeout(sendNextFrame, 180);
-//         }
-//       };
-
-//       ws.onopen = () => {
-//         setIsConnected(true);
-//         sendNextFrame();
-//       };
-
-//       ws.onclose = () => {
-//         setIsConnected(false);
-//       };
-
-//       ws.onmessage = (event) => {
-//         try {
-//           const rawData: AIResponse = JSON.parse(event.data);
-
-//           // Use React batching naturally
-//           setAiData(rawData);
-
-//           // Example updates
-//           if (rawData?.alert) {
-//             setAlertsToday((prev) => prev + 1);
-
-//             setAlertLogs((prev) => [
-//               {
-//                 time: new Date().toLocaleTimeString(),
-//                 message: rawData.alert,
-//               },
-//               ...prev.slice(0, 9),
-//             ]);
-//           }
-//         } catch (err) {
-//           console.error(err);
-//         }
-//       };
-//     }, 1000); // wait for animation first
-
-//     return () => {
-//       clearTimeout(connectDelay);
-
-//       if (wsRef.current) {
-//         wsRef.current.close();
+//     const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
+//     wsRef.current = ws;
+//     const sendNextFrame = () => {
+//       if (webcamRef.current && ws.readyState === WebSocket.OPEN) {
+//         const imageSrc = webcamRef.current.getScreenshot();
+//         if (imageSrc) ws.send(imageSrc);
+//         setTimeout(sendNextFrame, 180);
 //       }
 //     };
+//     ws.onopen = () => { setIsConnected(true); sendNextFrame(); };
+//     ws.onclose = () => setIsConnected(false);
+//     ws.onmessage = (event) => {
+//       try {
+//         const rawData: AIResponse = JSON.parse(event.data);
+//         setAiData(rawData);
+//         if (rawData?.alert) {
+//           setAlertsToday((prev) => prev + 1);
+//           setAlertLogs((prev) => [{ time: new Date().toLocaleTimeString(), message: rawData.alert }, ...prev.slice(0, 9)]);
+//         }
+//       } catch (err) { console.error(err); }
+//     };
+//     return () => { if (wsRef.current) wsRef.current.close(); };
 //   }, [appState, isEmergency]);
 
-//   // ----------------------------------------
-//   // INITIALIZE APP
-//   // ----------------------------------------
-//   const handleInitialize = () => {
-//     setAppState("INITIALIZING");
+//   // --- 3-PHOTO SOS SEQUENCE ---
+//   const handleSOS = async () => {
+//     setIsEmergency(true);
+//     console.log("SOS Sequence Initiated: Sending 3 snapshots...");
 
-//     setTimeout(() => {
-//       setAppState("READY");
-//     }, 1500);
-//   };
+//     const sendPacket = async (isFollowUp: boolean, lat: number | null = null, lng: number | null = null) => {
+//       const screenshot = webcamRef.current?.getScreenshot();
+//       if (!screenshot) console.error("Failed to capture frame");
 
-//   const handleStartDrive = () => {
-//     setAppState("DRIVING");
-//   };
+//       try {
+//         await fetch("http://127.0.0.1:8000/api/sos/whatsapp", {
+//           method: "POST",
+//           headers: { "Content-Type": "application/json" },
+//           body: JSON.stringify({
+//             latitude: lat,
+//             longitude: lng,
+//             guardian_number: "923270707947",
+//             driver_name: "Hamza",
+//             image: screenshot,
+//             is_follow_up: isFollowUp
+//           }),
+//         });
+//         console.log(`SOS Packet Sent (Follow-up: ${isFollowUp})`);
+//       } catch (error) {
+//         console.error("SOS Packet Error:", error);
+//       }
+//     };
 
-//   // ----------------------------------------
-//   // START SCREEN
-//   // ----------------------------------------
-//   if (appState !== "DRIVING") {
-//     return (
-//       <StartScreen
-//         appState={appState}
-//         onInitialize={handleInitialize}
-//         onStart={handleStartDrive}
-//       />
-//     );
-//   }
-
-
-//   //  CAPTURING COORDINATES FOR LOCCATION SHARING 
-// const handleSOS = async () => {
-//   console.log("SOS Initiated...");
-//   setIsEmergency(true);
-
-//   const sendToBackend = async (lat: number | null, lng: number | null) => {
-//     try {
-//       await fetch("http://localhost:8000/api/sos/whatsapp", {
-//         method: "POST",
-//         headers: { "Content-Type": "application/json" },
-//         body: JSON.stringify({
-//           latitude: lat,
-//           longitude: lng,
-//           guardian_number: "92370707947",
-//           driver_name: "Hamza"
-//         }),
-//       });
-//       console.log("SOS Signal sent to server.");
-//     } catch (error) {
-//       console.error("Backend Error:", error);
+//     if ("geolocation" in navigator) {
+//       navigator.geolocation.getCurrentPosition(
+//         async (pos) => {
+//           // Packet 1: Immediate (Text + Location + Pic)
+//           await sendPacket(false, pos.coords.latitude, pos.coords.longitude);
+//           // Packet 2: After 5s (Pic only)
+//           setTimeout(() => sendPacket(true), 5000);
+//           // Packet 3: After 10s (Pic only)
+//           setTimeout(() => sendPacket(true), 10000);
+//         },
+//         async () => {
+//           // Fallback if GPS fails
+//           await sendPacket(false, null, null);
+//           setTimeout(() => sendPacket(true), 5000);
+//           setTimeout(() => sendPacket(true), 10000);
+//         },
+//         { timeout: 5000 }
+//       );
 //     }
 //   };
 
-//   if ("geolocation" in navigator) {
-//     navigator.geolocation.getCurrentPosition(
-//       (pos) => {
-//         sendToBackend(pos.coords.latitude, pos.coords.longitude);
-//       },
-//       (err) => {
-//         console.warn("Browser GPS failed. Letting backend find location via IP...");
-//         sendToBackend(null, null); // Backend will take over now
-//       },
-//       { timeout: 5000 }
-//     );
-//   } else {
-//     sendToBackend(null, null);
+//   if (appState !== "DRIVING") {
+//     return <StartScreen appState={appState} onInitialize={() => { setAppState("INITIALIZING"); setTimeout(() => setAppState("READY"), 1500); }} onStart={() => setAppState("DRIVING")} />;
 //   }
-// };
 
 //   return (
-//     <div
-//       ref={containerRef}
-//       className="min-h-screen bg-[#F2E8D9] text-[#3D2B1F] p-4 lg:p-6 font-sans overflow-hidden"
-//     >
+//     <div ref={containerRef} className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 lg:p-6 font-sans overflow-hidden">
 //       <div className="max-w-[1600px] mx-auto">
-
-//         {/* HEADER */}
 //         <div className="dashboard-animate">
-//           <MemoHeader
-//             isConnected={isConnected}
-//             isEmergency={isEmergency}
-//             onOpenSettings={() => setIsSettingsOpen(true)}
-//           />
+//           <MemoHeader isConnected={isConnected} isEmergency={isEmergency} onOpenSettings={() => setIsSettingsOpen(true)} />
 //         </div>
-
-//         {/* MAIN GRID */}
 //         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-5">
-
-//           {/* LEFT SIDE */}
 //           <div className="lg:col-span-8 flex flex-col gap-5">
-
-//             <div
-//               className="
-//                 dashboard-animate
-//                 rounded-2xl
-//                 bg-[#3D2B1F]
-//                 shadow-lg
-//                 overflow-hidden
-//                 transform-gpu
-//               "
-//             >
-//               <MemoVideoFeed
-//                 webcamRef={webcamRef}
-//                 canvasRef={canvasRef}
-//                 aiData={aiData}
-//                 isEmergency={isEmergency}
-//                 alertsToday={alertsToday}
-//                 driveTime={driveTime}
-//                 safetyScore={safetyScore}
-//               />
+//             <div className="dashboard-animate rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-lg overflow-hidden">
+//               <MemoVideoFeed webcamRef={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ width: 1280, height: 720 }} canvasRef={canvasRef} aiData={aiData} isEmergency={isEmergency} alertsToday={alertsToday} driveTime={driveTime} safetyScore={safetyScore} />
 //             </div>
-
-//             <div
-//               className="
-//                 dashboard-animate
-//                 rounded-2xl
-//                 bg-[#3D2B1F]
-//                 shadow-lg
-//                 overflow-hidden
-//                 transform-gpu
-//               "
-//             >
+//             <div className="dashboard-animate rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-lg overflow-hidden">
 //               <MemoAlertHistory logs={alertLogs} />
 //             </div>
 //           </div>
-
-//           {/* RIGHT SIDE */}
 //           <div className="lg:col-span-4 flex flex-col gap-5">
-
-//             <div
-//               className="
-//                 dashboard-animate
-//                 rounded-2xl
-//                 bg-[#3D2B1F]
-//                 shadow-lg
-//                 overflow-hidden
-//                 transform-gpu
-//               "
-//             >
-//               <MemoSafetyScore score={safetyScore} />
-//             </div>
-
-//             <div
-//               className="
-//                 dashboard-animate
-//                 rounded-2xl
-//                 bg-[#3D2B1F]
-//                 shadow-lg
-//                 overflow-hidden
-//                 transform-gpu
-//               "
-//             >
-//               <MemoDetectionStatus aiData={aiData} />
-//             </div>
-
-//             <div
-//               className="
-//                 dashboard-animate
-//                 rounded-2xl
-//                 bg-[#3D2B1F]
-//                 shadow-lg
-//                 overflow-hidden
-//                 transform-gpu
-//               "
-//             >
-// <MemoEmergencyContacts
-//   isEmergency={isEmergency}
-//   onTriggerSOS={handleSOS} // Use our new handleSOS function
-// />
-//             </div>
+//             <div className="dashboard-animate"><MemoSafetyScore score={safetyScore} /></div>
+//             <div className="dashboard-animate"><MemoDetectionStatus aiData={aiData} /></div>
+//             <div className="dashboard-animate"><MemoEmergencyContacts isEmergency={isEmergency} onTriggerSOS={handleSOS} /></div>
 //           </div>
 //         </div>
-
-//         {/* SETTINGS PANEL (Preserved from first code) */}
 //         <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 //       </div>
 //     </div>
 //   );
 // }
 
+
 "use client";
 
 import React, { useEffect, useRef, useState, memo } from "react";
 import Webcam from "react-webcam";
 import { AIResponse } from "../types";
-
-// GSAP
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 
@@ -376,33 +188,21 @@ export default function Dashboard() {
   const [isConnected, setIsConnected] = useState(false);
   const [isEmergency, setIsEmergency] = useState(false);
   const [aiData, setAiData] = useState<AIResponse | null>(null);
-
   const [safetyScore, setSafetyScore] = useState(100);
   const [alertsToday, setAlertsToday] = useState(0);
   const [driveTime, setDriveTime] = useState(0);
   const [alertLogs, setAlertLogs] = useState<any[]>([]);
 
-  // ENTRANCE ANIMATION
   useGSAP(() => {
     if (appState !== "DRIVING") return;
     gsap.set(".dashboard-animate", { opacity: 0, y: 30 });
-    gsap.to(".dashboard-animate", {
-      opacity: 1,
-      y: 0,
-      stagger: 0.06,
-      ease: "power3.out",
-      duration: 0.9,
-    });
+    gsap.to(".dashboard-animate", { opacity: 1, y: 0, stagger: 0.06, ease: "power3.out", duration: 0.9 });
   }, { dependencies: [appState], scope: containerRef });
 
-  // WEBSOCKET (BACK TO LOCAL)
   useEffect(() => {
     if (appState !== "DRIVING" || isEmergency) return;
-
-    // const ws = new WebSocket("ws://localhost:8000/ws/video");
-const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
+    const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
     wsRef.current = ws;
-
     const sendNextFrame = () => {
       if (webcamRef.current && ws.readyState === WebSocket.OPEN) {
         const imageSrc = webcamRef.current.getScreenshot();
@@ -410,7 +210,6 @@ const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
         setTimeout(sendNextFrame, 180);
       }
     };
-
     ws.onopen = () => { setIsConnected(true); sendNextFrame(); };
     ws.onclose = () => setIsConnected(false);
     ws.onmessage = (event) => {
@@ -419,61 +218,88 @@ const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
         setAiData(rawData);
         if (rawData?.alert) {
           setAlertsToday((prev) => prev + 1);
-          setAlertLogs((prev) => [{
-            time: new Date().toLocaleTimeString(),
-            message: rawData.alert,
-          }, ...prev.slice(0, 9)]);
+          setAlertLogs((prev) => [{ time: new Date().toLocaleTimeString(), message: rawData.alert }, ...prev.slice(0, 9)]);
         }
       } catch (err) { console.error(err); }
     };
-
     return () => { if (wsRef.current) wsRef.current.close(); };
   }, [appState, isEmergency]);
 
-  const handleInitialize = () => {
-    setAppState("INITIALIZING");
-    setTimeout(() => setAppState("READY"), 1500);
-  };
-
-  // SOS LOGIC (BACK TO LOCAL)
+  // --- FULL SOS SEQUENCE: TEXT + 3 PICS + 5S VIDEO ---
   const handleSOS = async () => {
-    console.log("SOS Initiated...");
     setIsEmergency(true);
+    console.log("SOS Initiated: Recording Video & Sending Alerts...");
 
-    const sendToBackend = async (lat: number | null, lng: number | null) => {
+    const sendPacket = async (isFollowUp: boolean, lat: number | null = null, lng: number | null = null, videoBlob: string | null = null) => {
+      const screenshot = webcamRef.current?.getScreenshot();
       try {
-        const response = await fetch("http://localhost:8000/api/sos/whatsapp", {
+        await fetch("http://127.0.0.1:8000/api/sos/whatsapp", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             latitude: lat,
             longitude: lng,
             guardian_number: "923270707947",
-            driver_name: "Hamza"
+            driver_name: "Hamza",
+            image: !videoBlob ? screenshot : null, // Send image if no video
+            video: videoBlob, // Send video if provided
+            is_follow_up: isFollowUp
           }),
         });
-        console.log("SOS Sent successfully");
-      } catch (error) {
-        console.error("Backend Error:", error);
-      }
+      } catch (error) { console.error("SOS Packet Failed", error); }
     };
 
+    // 1. Setup Video Recording
+    const stream = (webcamRef.current?.video as any)?.srcObject as MediaStream;
+    if (stream) {
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        console.log("Recording stopped. Preparing video...");
+        const blob = new Blob(chunks, { type: 'video/webm' }); // Keep as webm
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const base64Video = reader.result as string;
+          console.log("Sending video string to backend...");
+
+          await fetch("http://127.0.0.1:8000/api/sos/whatsapp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              guardian_number: "923270707947",
+              driver_name: "Hamza",
+              video: base64Video,
+              is_follow_up: true
+            }),
+          });
+        };
+      };
+      mediaRecorder.start();
+      setTimeout(() => mediaRecorder.stop(), 5000);
+    }
+
+    // 2. Handle Location & Immediate Text + 3 Pics
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => sendToBackend(pos.coords.latitude, pos.coords.longitude),
-        (err) => {
-          console.warn("GPS failed, using IP fallback");
-          sendToBackend(null, null);
+        async (pos) => {
+          await sendPacket(false, pos.coords.latitude, pos.coords.longitude); // Text + Pic 1
+          setTimeout(() => sendPacket(true), 5000);  // Pic 2
+          setTimeout(() => sendPacket(true), 10000); // Pic 3
+        },
+        async () => {
+          await sendPacket(false, null, null);
+          setTimeout(() => sendPacket(true), 5000);
+          setTimeout(() => sendPacket(true), 10000);
         },
         { timeout: 5000 }
       );
-    } else {
-      sendToBackend(null, null);
     }
   };
 
   if (appState !== "DRIVING") {
-    return <StartScreen appState={appState} onInitialize={handleInitialize} onStart={() => setAppState("DRIVING")} />;
+    return <StartScreen appState={appState} onInitialize={() => { setAppState("INITIALIZING"); setTimeout(() => setAppState("READY"), 1500); }} onStart={() => setAppState("DRIVING")} />;
   }
 
   return (
@@ -482,30 +308,21 @@ const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
         <div className="dashboard-animate">
           <MemoHeader isConnected={isConnected} isEmergency={isEmergency} onOpenSettings={() => setIsSettingsOpen(true)} />
         </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-5">
           <div className="lg:col-span-8 flex flex-col gap-5">
             <div className="dashboard-animate rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-lg overflow-hidden">
-              <MemoVideoFeed webcamRef={webcamRef} canvasRef={canvasRef} aiData={aiData} isEmergency={isEmergency} alertsToday={alertsToday} driveTime={driveTime} safetyScore={safetyScore} />
+              <MemoVideoFeed webcamRef={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ width: 1280, height: 720 }} canvasRef={canvasRef} aiData={aiData} isEmergency={isEmergency} alertsToday={alertsToday} driveTime={driveTime} safetyScore={safetyScore} />
             </div>
             <div className="dashboard-animate rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-lg overflow-hidden">
               <MemoAlertHistory logs={alertLogs} />
             </div>
           </div>
-
           <div className="lg:col-span-4 flex flex-col gap-5">
-            <div className="dashboard-animate">
-              <MemoSafetyScore score={safetyScore} />
-            </div>
-            <div className="dashboard-animate">
-              <MemoDetectionStatus aiData={aiData} />
-            </div>
-            <div className="dashboard-animate">
-              <MemoEmergencyContacts isEmergency={isEmergency} onTriggerSOS={handleSOS} />
-            </div>
+            <div className="dashboard-animate"><MemoSafetyScore score={safetyScore} /></div>
+            <div className="dashboard-animate"><MemoDetectionStatus aiData={aiData} /></div>
+            <div className="dashboard-animate"><MemoEmergencyContacts isEmergency={isEmergency} onTriggerSOS={handleSOS} /></div>
           </div>
         </div>
-
         <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       </div>
     </div>

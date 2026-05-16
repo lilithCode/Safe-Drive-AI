@@ -68,9 +68,9 @@ export default function VideoFeed({
         const isWarning = data.head_distracted || data.yawning;
 
         // Theme colors for Canvas (Refined Palette)
-        const amberAccent = "#E8B06F"; 
-        const warmRed = "#D9534F";  
-        const sageGreen = "#A3B18A"; 
+        const amberAccent = "#E8B06F";
+        const warmRed = "#D9534F";
+        const sageGreen = "#A3B18A";
 
         const now = Date.now();
         const fastPulse = Math.sin(now / 200) * 0.5 + 0.5;
@@ -90,7 +90,7 @@ export default function VideoFeed({
         // 1. Scanline Sweep
         const scanGrad = ctx.createLinearGradient(0, scanY - 60, 0, scanY + 60);
         scanGrad.addColorStop(0, `rgba(0,0,0,0)`);
-        scanGrad.addColorStop(0.5, `${activeColor}33`); 
+        scanGrad.addColorStop(0.5, `${activeColor}33`);
         scanGrad.addColorStop(1, `rgba(0,0,0,0)`);
         ctx.fillStyle = scanGrad;
         ctx.fillRect(0, scanY - 60, canvas.width, 120);
@@ -127,7 +127,7 @@ export default function VideoFeed({
   return (
     <div className="bg-[#3D2B1F] rounded-2xl border border-[#4D392C] p-2 sm:p-4 shadow-2xl transition-all duration-500">
       <div className="relative w-full aspect-[16/9] rounded-xl overflow-hidden bg-black shadow-inner ring-1 ring-[#4D392C]">
-        
+
         {/* Emergency Overlay */}
         {isEmergency && (
           <div className="absolute inset-0 bg-[#D9534F]/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-40 transition-all">
@@ -164,20 +164,25 @@ export default function VideoFeed({
           ref={webcamRef}
           audio={false}
           mirrored={true}
-          screenshotFormat="image/jpeg"
-          videoConstraints={{ facingMode: "user", width: 1280, height: 720 }}
+          screenshotFormat="image/jpeg" // <--- CRITICAL: Without this, screenshot is null
+          screenshotQuality={0.8}       // <--- Reduces size for faster WhatsApp sending
+          videoConstraints={{
+            facingMode: "user",
+            width: 1280,
+            height: 720
+          }}
           className="absolute w-full h-full object-cover opacity-60 mix-blend-screen grayscale-[20%]"
         />
-        
+
         <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full object-cover z-20" />
       </div>
 
       {/* Bottom Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-        <StatCard icon={<ShieldCheck size={14}/>} title="Safety Index" value={`${Math.round(safetyScore)}%`} accent={safetyScore < 50 ? "#D9534F" : "#E8B06F"} />
-        <StatCard icon={<AlertCircle size={14}/>} title="Alerts Triggered" value={alertsToday} accent={alertsToday > 5 ? "#D9534F" : "#FFFFFF"} />
-        <StatCard icon={<Timer size={14}/>} title="Session Time" value={`${driveTime}m`} />
-        <StatCard icon={<Zap size={14}/>} title="AI Latency" value="32ms" accent="#A3B18A" />
+        <StatCard icon={<ShieldCheck size={14} />} title="Safety Index" value={`${Math.round(safetyScore)}%`} accent={safetyScore < 50 ? "#D9534F" : "#E8B06F"} />
+        <StatCard icon={<AlertCircle size={14} />} title="Alerts Triggered" value={alertsToday} accent={alertsToday > 5 ? "#D9534F" : "#FFFFFF"} />
+        <StatCard icon={<Timer size={14} />} title="Session Time" value={`${driveTime}m`} />
+        <StatCard icon={<Zap size={14} />} title="AI Latency" value="32ms" accent="#A3B18A" />
       </div>
     </div>
   );
