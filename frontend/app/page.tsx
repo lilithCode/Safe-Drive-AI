@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, memo } from "react";
 import Webcam from "react-webcam";
 import { AIResponse } from "../types";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 
 import Header from "../components/Header";
 import VideoFeed from "../components/VideoFeed";
@@ -11,277 +13,178 @@ import DetectionStatus from "../components/DetectionStatus";
 import AlertHistory from "../components/AlertHistory";
 import EmergencyContacts from "../components/EmergencyContacts";
 import StartScreen from "../components/StartScreen";
+import SettingsPanel from "../components/SettingsPanel";
+import SetupWizard from "../components/SetupWizard";
+
+const MemoHeader = memo(Header);
+const MemoVideoFeed = memo(VideoFeed);
+const MemoSafetyScore = memo(SafetyScore);
+const MemoDetectionStatus = memo(DetectionStatus);
+const MemoAlertHistory = memo(AlertHistory);
+const MemoEmergencyContacts = memo(EmergencyContacts);
 
 export default function Dashboard() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  const [appState, setAppState] = useState<
-    "IDLE" | "INITIALIZING" | "READY" | "DRIVING"
-  >("IDLE");
+  const [appState, setAppState] = useState<"IDLE" | "INITIALIZING" | "READY" | "DRIVING">("IDLE");
   const [isConnected, setIsConnected] = useState(false);
   const [isEmergency, setIsEmergency] = useState(false);
   const [aiData, setAiData] = useState<AIResponse | null>(null);
   const [safetyScore, setSafetyScore] = useState(100);
-
   const [alertsToday, setAlertsToday] = useState(0);
   const [driveTime, setDriveTime] = useState(0);
   const [alertLogs, setAlertLogs] = useState<any[]>([]);
 
-  const lastAlertTime = useRef<number>(0);
-  const yawnFramesRef = useRef<number>(0);
-  const closedEyesFramesRef = useRef<number>(0); // Tracks consecutive frames eyes are closed
-  const penaltyFrames = useRef<number>(0);
-  const safeFrames = useRef<number>(0);
-  const driveStartTime = useRef<number>(Date.now());
+  const [userConfig, setUserConfig] = useState<any>(null);
+  const [needsSetup, setNeedsSetup] = useState(false);
 
+  // Load configuration from browser memory
   useEffect(() => {
-    if (appState !== "DRIVING") return;
-    const interval = setInterval(() => {
-      setDriveTime(Math.floor((Date.now() - driveStartTime.current) / 60000));
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [appState]);
+    const savedConfig = localStorage.getItem("safedrive_user_config");
+    if (savedConfig) {
+      setUserConfig(JSON.parse(savedConfig));
+    } else {
+      setNeedsSetup(true);
+    }
+  }, []);
 
-  // Sync Loop WebSocket connection (Prevents Backend Crash/Overload)
+  // Entrance Animation
+  useGSAP(() => {
+    if (appState !== "DRIVING") return;
+    gsap.set(".dashboard-animate", { opacity: 0, y: 30 });
+    gsap.to(".dashboard-animate", { opacity: 1, y: 0, stagger: 0.06, ease: "power3.out", duration: 0.9 });
+  }, { dependencies: [appState], scope: containerRef });
+
+  // AI WebSocket Connection
   useEffect(() => {
     if (appState !== "DRIVING" || isEmergency) return;
-
-    const ws = new WebSocket("ws://localhost:8000/ws/video");
-
-    // Function sends ONE frame
+    const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
+    wsRef.current = ws;
     const sendNextFrame = () => {
       if (webcamRef.current && ws.readyState === WebSocket.OPEN) {
         const imageSrc = webcamRef.current.getScreenshot();
-        if (imageSrc) {
-          ws.send(imageSrc);
-        } else {
-          // If screenshot failed (e.g. video loading), try again shortly
-          setTimeout(sendNextFrame, 50);
-        }
+        if (imageSrc) ws.send(imageSrc);
+        setTimeout(sendNextFrame, 180);
       }
     };
-
-    ws.onopen = () => {
-      setIsConnected(true);
-      sendNextFrame(); 
-    };
-
+    ws.onopen = () => { setIsConnected(true); sendNextFrame(); };
     ws.onclose = () => setIsConnected(false);
-
     ws.onmessage = (event) => {
-      const rawData: AIResponse = JSON.parse(event.data);
-
-      // Yawning persistence filter
-      if (rawData.yawning) yawnFramesRef.current += 1;
-      else yawnFramesRef.current = 0;
-
-      // Blink vs Drowsy filter: Ignores normal blinks.
-      if (rawData.drowsy) closedEyesFramesRef.current += 1;
-      else closedEyesFramesRef.current = 0;
-
-      const filteredData = {
-        ...rawData,
-        yawning: yawnFramesRef.current >= 2,
-        drowsy: closedEyesFramesRef.current >= 2, 
-      };
-
-      setAiData(filteredData);
-      updateSafetyScore(filteredData);
-      triggerAudioAlerts(filteredData);
-
-      setTimeout(sendNextFrame, 50);
+      try {
+        const rawData: AIResponse = JSON.parse(event.data);
+        setAiData(rawData);
+        if (rawData?.alert) {
+          setAlertsToday((prev) => prev + 1);
+          setAlertLogs((prev) => [{ time: new Date().toLocaleTimeString(), message: rawData.alert }, ...prev.slice(0, 9)]);
+        }
+      } catch (err) { console.error(err); }
     };
-
-    return () => {
-      ws.close();
-    };
+    return () => { if (wsRef.current) wsRef.current.close(); };
   }, [appState, isEmergency]);
 
-  const handleInitialize = () => {
-    setAppState("INITIALIZING");
-    setTimeout(() => {
-      setAppState("READY");
-    }, 2500);
-  };
+  // --- SOS LOGIC: TEXT + 3 PICS + 5S VIDEO ---
+  const handleSOS = async () => {
+    const dNumber = userConfig?.driverNumber;
+    if (!dNumber) return;
 
-  const handleStartDrive = () => {
-    setAppState("DRIVING");
-    driveStartTime.current = Date.now();
+    setIsEmergency(true);
+    console.log("SOS Initiated for Driver:", dNumber);
 
-    const AudioContextClass =
-      window.AudioContext || (window as any).webkitAudioContext;
-    if (AudioContextClass) {
-      audioCtxRef.current = new AudioContextClass();
-      audioCtxRef.current.resume();
+    const sendPacket = async (isFollowUp: boolean, lat: number | null = null, lng: number | null = null, videoBlob: string | null = null) => {
+      const screenshot = webcamRef.current?.getScreenshot();
+      try {
+        await fetch("http://127.0.0.1:8000/api/sos/whatsapp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: dNumber,
+            latitude: lat,
+            longitude: lng,
+            guardian_number: userConfig.guardianNumber,
+            driver_name: userConfig.driverName,
+            image: !videoBlob ? screenshot : null,
+            video: videoBlob,
+            is_follow_up: isFollowUp
+          }),
+        });
+      } catch (error) { console.error("SOS Packet Failed", error); }
+    };
+
+    // 1. Setup Video Recording (RESTORED)
+    const stream = (webcamRef.current?.video as any)?.srcObject as MediaStream;
+    if (stream) {
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => sendPacket(true, null, null, reader.result as string);
+      };
+      mediaRecorder.start();
+      setTimeout(() => mediaRecorder.stop(), 5000);
     }
 
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const unlockAudio = new SpeechSynthesisUtterance(
-        "System Active. Monitoring started.",
-      );
-      unlockAudio.volume = 1;
-      window.speechSynthesis.speak(unlockAudio);
-    }
-  };
-
-  const logAlert = (
-    title: string,
-    desc: string,
-    type: "critical" | "warning" | "info",
-  ) => {
-    setAlertLogs((prev) =>
-      [
-        {
-          id: Date.now(),
-          title,
-          desc,
-          time: new Date().toLocaleTimeString(),
-          type,
+    // 2. Handle Location & Immediate Text + Photos
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          await sendPacket(false, pos.coords.latitude, pos.coords.longitude); // Text + Pic 1
+          setTimeout(() => sendPacket(true), 5000);  // Pic 2
+          setTimeout(() => sendPacket(true), 10000); // Pic 3
         },
-        ...prev,
-      ].slice(0, 5),
-    );
-    setAlertsToday((prev) => prev + 1);
-  };
-
-  const updateSafetyScore = useCallback((data: AIResponse) => {
-    setSafetyScore((prev) => {
-      let isUnsafe = false;
-      let currentPenalty = 0;
-
-      if (!data.face_detected) {
-        isUnsafe = true;
-        currentPenalty = 1;
-      }
-      if (data.drowsy) {
-        isUnsafe = true;
-        currentPenalty = 4; 
-      }
-      if (data.phone_detected) {
-        isUnsafe = true;
-        currentPenalty = 3;
-      }
-      if (data.head_distracted) {
-        isUnsafe = true;
-        currentPenalty = 1.5;
-      }
-      if (data.yawning) {
-        isUnsafe = true;
-        currentPenalty = 1;
-      }
-
-      if (isUnsafe) {
-        safeFrames.current = 0;
-        penaltyFrames.current += 1;
-        if (penaltyFrames.current >= 2)
-          return Math.max(0, prev - currentPenalty);
-        return prev;
-      } else {
-        penaltyFrames.current = 0;
-        safeFrames.current += 1;
-        if (safeFrames.current >= 2) return Math.min(100, prev + 1);
-        return prev;
-      }
-    });
-  }, []);
-
-  const playBeep = () => {
-    if (!audioCtxRef.current) return;
-    const osc = audioCtxRef.current.createOscillator();
-    const gain = audioCtxRef.current.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtxRef.current.destination);
-    osc.type = "square";
-    osc.frequency.setValueAtTime(600, audioCtxRef.current.currentTime);
-    gain.gain.setValueAtTime(0.05, audioCtxRef.current.currentTime);
-    osc.start();
-    osc.stop(audioCtxRef.current.currentTime + 0.2);
-  };
-
-  const triggerAudioAlerts = useCallback((data: AIResponse) => {
-    const now = Date.now();
-
-    // Give the 5 seconds to boot up before triggering any warnings
-    if (now - driveStartTime.current < 5000) return;
-    // Cooldown prevents spamming
-    if (now - lastAlertTime.current < 4000) return;
-
-    let message = "";
-    if (data.drowsy) {
-      message = "Wake up! Drowsiness detected.";
-      logAlert(
-        "Eyes closed",
-        `EAR dropped to ${data.ear?.toFixed(2)}`,
-        "critical",
+        async () => {
+          await sendPacket(false, null, null); // Fallback
+          setTimeout(() => sendPacket(true), 5000);
+          setTimeout(() => sendPacket(true), 10000);
+        },
+        { timeout: 5000 }
       );
-    } else if (data.phone_detected) {
-      message = "Please put your phone away.";
-      logAlert("Phone detected", "Distracted by phone", "critical");
-    } else if (!data.face_detected) {
-      message = "Please look at the camera.";
-      logAlert("Face lost", "Camera view obscured", "warning");
-    } else if (data.head_distracted) {
-      message = "Keep your eyes on the road.";
-      logAlert("Head tilted", "Looking away from road", "warning");
-    } else if (data.yawning) {
-      message = "You seem tired. Please take a break.";
-      logAlert("Yawning detected", "Fatigue risk", "info");
     }
+  };
 
-    if (message !== "") {
-      lastAlertTime.current = now;
-      playBeep();
-
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-        setTimeout(() => {
-          const utterance = new SpeechSynthesisUtterance(message);
-          utterance.rate = 1.0;
-          window.speechSynthesis.speak(utterance);
-        }, 100);
-      }
-    }
-  }, []);
+  if (needsSetup) {
+    return <SetupWizard onComplete={(data) => { setUserConfig(data); setNeedsSetup(false); }} />;
+  }
 
   if (appState !== "DRIVING") {
-    return (
-      <StartScreen
-        appState={appState}
-        onInitialize={handleInitialize}
-        onStart={handleStartDrive}
-      />
-    );
+    return <StartScreen appState={appState} onInitialize={() => { setAppState("INITIALIZING"); setTimeout(() => setAppState("READY"), 1500); }} onStart={() => setAppState("DRIVING")} />;
   }
 
   return (
-    <div className="min-h-screen bg-[#141414] text-zinc-100 p-4 lg:p-6 font-sans">
-      <Header isConnected={isConnected} isEmergency={isEmergency} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 max-w-[1600px] mx-auto">
-        <div className="lg:col-span-8 flex flex-col gap-6">
-          <VideoFeed
-            webcamRef={webcamRef}
-            canvasRef={canvasRef}
-            aiData={aiData}
-            isEmergency={isEmergency}
-            alertsToday={alertsToday}
-            driveTime={driveTime}
-            safetyScore={safetyScore}
-          />
-          <AlertHistory logs={alertLogs} />
+    <div ref={containerRef} className="min-h-screen bg-[var(--background)] text-[var(--text-primary)] p-4 lg:p-6 font-sans overflow-hidden">
+      <div className="max-w-[1600px] mx-auto">
+        <div className="dashboard-animate">
+          <MemoHeader isConnected={isConnected} isEmergency={isEmergency} onOpenSettings={() => setIsSettingsOpen(true)} />
         </div>
 
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          <SafetyScore score={safetyScore} />
-          <DetectionStatus aiData={aiData} />
-          <EmergencyContacts
-            isEmergency={isEmergency}
-            onTriggerSOS={() => setIsEmergency(true)}
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-5">
+          <div className="lg:col-span-8 flex flex-col gap-5">
+            <div className="dashboard-animate rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-lg overflow-hidden transform-gpu">
+              <MemoVideoFeed webcamRef={webcamRef} screenshotFormat="image/jpeg" videoConstraints={{ width: 1280, height: 720 }} canvasRef={canvasRef} aiData={aiData} isEmergency={isEmergency} alertsToday={alertsToday} driveTime={driveTime} safetyScore={safetyScore} />
+            </div>
+            <div className="dashboard-animate rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-lg overflow-hidden transform-gpu">
+              <MemoAlertHistory logs={alertLogs} />
+            </div>
+          </div>
+
+          <div className="lg:col-span-4 flex flex-col gap-5">
+            <div className="dashboard-animate"><MemoSafetyScore score={safetyScore} /></div>
+            <div className="dashboard-animate"><MemoDetectionStatus aiData={aiData} /></div>
+            <div className="dashboard-animate"><MemoEmergencyContacts isEmergency={isEmergency} onTriggerSOS={handleSOS} /></div>
+          </div>
         </div>
+
+        <SettingsPanel 
+          isOpen={isSettingsOpen} 
+          onClose={() => setIsSettingsOpen(false)} 
+          onResetConfig={() => { localStorage.removeItem("safedrive_user_config"); window.location.reload(); }} 
+        />
       </div>
     </div>
   );

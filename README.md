@@ -1,9 +1,12 @@
+Here is the updated and detailed **README.md** following your exact format, including all the new features we implemented (WhatsApp Bridge, SOS logic, and Multi-user setup).
+
+---
+
 # SafeDrive AI
  
-> Real-time Driver Assistance & Monitoring Dashboard
+> Real-time Driver Assistance & Monitoring Dashboard with Automated SOS Response
  
-SafeDrive AI is a browser-based, AI-powered dashboard that helps prevent road accidents by monitoring driver fatigue and distractions in real time. 
-Built as a university project to demonstrate practical Computer Vision and modern Web Technologies.
+SafeDrive AI is a professional, AI-powered dashboard that monitors driver fatigue and distractions in real time. Beyond just monitoring, it features an automated emergency response system that sends location data, visual snapshots, and video evidence to guardians via WhatsApp if an accident or drowsiness is detected.
  
 ---
  
@@ -11,128 +14,108 @@ Built as a university project to demonstrate practical Computer Vision and moder
  
 | Feature | How |
 |---|---|
-| Drowsiness detection | MediaPipe FaceMesh calculates Eye Aspect Ratio (EAR) in-browser. Alerts when eyes stay closed too long. |
-| Distraction detection | YOLOv8 on the backend spots phone usage, eating, drinking, and more. |
-| Real time alerts | WebSockets push warnings from backend to UI instantly , no page refresh. |
-| Live dashboard | Next.js UI shows safety score, live alert logs, and risk level indicators. |
-| 3D face mesh | Custom WebGL/Canvas renderer draws a 468-point facial mesh at 60 FPS. |
+| **Drowsiness Detection** | MediaPipe FaceMesh calculates Eye Aspect Ratio (EAR) in-browser. Alerts when eyes stay closed for >4 frames. |
+| **Distraction Detection** | YOLOv8 on the backend identifies phone usage and head-tilt/looking-away behavior. |
+| **Automated SOS** | Triggers an emergency "Data Packet" to guardians via WhatsApp including text and GPS location. |
+| **Visual Proof** | Captures and sends 3 sequential snapshots + a 5-second video clip of the driver during an alert. |
+| **Multi-User Link** | Integrated Setup Wizard allows drivers to use a "System Master" number or link their own via QR code. |
+| **Live Telemetry** | Real-time AI data pushed via WebSockets to a high-performance GSAP-animated HUD. |
  
 ---
  
 ## Tech stack
  
 **Frontend**
-- Next.js (React)
+- Next.js 15 (React)
 - Tailwind CSS
+- GSAP (Animations)
 - MediaPipe FaceMesh
-- WebSockets
-- HTML5 Canvas API
+- Lucide React (Icons)
+- HTML5 MediaRecorder API
+
 **Backend**
-- Python 3.8+
+- Python 3.10+
 - FastAPI
-- YOLOv8 
-- OpenCV
-- WebSockets
+- YOLOv8 (Ultralytics)
+- OpenCV & NumPy
+- HTTPX (Async API calls)
+
+**Communication Bridge**
+- Node.js (Express)
+- WhatsApp-Web.js (Puppeteer)
+- QR Code Terminal/React
 ---
  
 ## Prerequisites
  
 Make sure you have these installed before starting:
  
-- [Node.js](https://nodejs.org/) v18 or higher
-- [Python](https://www.python.org/) v3.8 or higher
+- [Node.js](https://nodejs.org/) v20 or higher
+- [Python](https://www.python.org/) v3.10 or higher
+- **System Requirements (Linux/Arch):**
+  ```bash
+  sudo pacman -S chromium ffmpeg
+  ```
 ---
  
 ## Running locally
  
-This is a monorepo with a frontend and a backend. You will need **two separate terminals** running at the same time.
+This is a monorepo with three components. You will need **three separate terminals** running at the same time.
  
 ---
  
-### Terminal 1 — Backend
+### Terminal 1 — WhatsApp Bridge (The Communication Hub)
+This service manages the WhatsApp sessions.
+ 
+```bash
+cd whatsapp-bridge
+npm install
+node index.js
+```
+> **Note:** On first run, scan the QR code in the terminal to initialize the **MASTER** system number.
+
+---
+
+### Terminal 2 — Backend (The Brain)
  
 ```bash
 cd backend
-```
- 
-Create a virtual environment:
- 
-```bash
 python3 -m venv venv
-```
- 
-Activate it:
- 
-```bash
-# Linux / Mac
-source venv/bin/activate
- 
-# Windows
-.\venv\Scripts\activate
-```
- 
-Install dependencies:
- 
-```bash
+source venv/bin/activate # Windows: .\venv\Scripts\activate
 pip install -r requirements.txt
- ``` 
-If any library version gives error then use this one  
-
-- fastapi==0.136.1
-- mediapipe==0.10.13
-- numpy==2.4.4
-- opencv-python==4.13.0.92
-- pydantic==2.13.3
-- pydantic_core==2.46.3
-- ultralytics==8.4.46
-- ultralytics-thop==2.0.19
-- uvicorn==0.46.0
-- websockets==16.0
-
-Start the server:
- 
-```bash
-uvicorn main:app --reload
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
- 
-> The first run will automatically download `yolov8n.pt` (~6 MB). This only happens once.
  
 ---
  
-### Terminal 2 — Frontend
+### Terminal 3 — Frontend (The Dashboard)
  
 ```bash
 cd frontend
-```
- 
-Install dependencies:
- 
-```bash
 npm install
-```
- 
-Start the app:
- 
-```bash
 npm run dev
 ```
  
 ---
  
-### Open the app
+### Initial Setup
  
-Go to [http://localhost:3000](http://localhost:3000) in your browser and allow camera access when prompted.
+1. Go to [http://localhost:3000](http://localhost:3000).
+2. The **Setup Wizard** will appear automatically on the first visit.
+3. Enter Driver and Guardian details.
+4. Choose **"Use System Number"** (uses your master login) or **"Use My Number"** (presents a QR code to link the driver's phone).
+5. Allow **Camera** and **Location** permissions in the browser.
  
 ---
  
 ## Project structure
  
 ```
-SafeDrive/
-├── backend/          # FastAPI server + YOLOv8 logic
-├── frontend/         # Next.js app + MediaPipe
+SafeDrive-AI/
+├── backend/          # FastAPI server + YOLOv8 + SOS logic
+├── frontend/         # Next.js app + MediaPipe + Dashboard UI
+├── whatsapp-bridge/  # Node.js Express server for WhatsApp Web sessions
 ├── README.md
 └── .gitignore
 ```
 ---
-
