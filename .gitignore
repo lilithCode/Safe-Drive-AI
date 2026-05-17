@@ -69,5 +69,10 @@ next-env.d.ts
 .DS_Store
 *.pem
 .vercel
+
+# ========================
+# Whatsapp bridge
+# ========================
 whatsapp-bridge/.wwebjs_auth/
 whatsapp-bridge/.wwebjs_cache/
+whatsapp-bridge/.local-browser/
