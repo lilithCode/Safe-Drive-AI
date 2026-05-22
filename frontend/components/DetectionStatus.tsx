@@ -1,3 +1,7 @@
+
+
+"use client";
+
 import React from "react";
 import { AIResponse } from "../types";
 
@@ -12,23 +16,36 @@ import { AIResponse } from "../types";
  * Alert: #D9534F (Warm Red)
  */
 
-export default function DetectionStatus({
-  aiData,
-}: {
+interface DetectionStatusProps {
   aiData: AIResponse | null;
-}) {
-  return (
-    <div className="bg-[#3D2B1F] p-5 sm:p-6 rounded-2xl border border-[#4D392C] shadow-xl transition-all duration-300">
-      <h3 className="text-[10px] sm:text-xs font-bold text-[#E8B06F] uppercase tracking-[0.2em] mb-5">
-        Detection Status
-      </h3>
+  nerdMode: boolean; // Dynamic structure mode controller
+}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+export default function DetectionStatus({ aiData, nerdMode }: DetectionStatusProps) {
+  return (
+    <div 
+      className={`bg-[#3D2B1F] rounded-2xl border border-[#4D392C] shadow-xl transition-all duration-300 ${
+        nerdMode ? "p-5 sm:p-6" : "p-3 sm:p-4 mt-5"
+      }`}
+    >
+      {nerdMode && (
+        <h3 className="text-[10px] sm:text-xs font-bold text-[#E8B06F] uppercase tracking-[0.2em] mb-5 animate-in fade-in duration-300">
+          Detection Status
+        </h3>
+      )}
+
+      {/* Grid adjusts layout on the fly: 2x2 if Nerd Mode is on, 1x4 horizontal bar if off */}
+      <div 
+        className={`grid gap-3 sm:gap-4 transition-all duration-300 ${
+          nerdMode ? "grid-cols-2" : "grid-cols-2 md:grid-cols-4"
+        }`}
+      >
         <StatusBox
           title="Eyes"
           isBad={aiData?.drowsy}
           badText="Closed"
           goodText="Open"
+          nerdMode={nerdMode}
         />
         <StatusBox
           title="Head pose"
@@ -37,12 +54,14 @@ export default function DetectionStatus({
           goodText="Forward"
           warning={!aiData?.face_detected}
           warnText="Not Found"
+          nerdMode={nerdMode}
         />
         <StatusBox
           title="Phone"
           isBad={aiData?.phone_detected}
           badText="Detected"
           goodText="None"
+          nerdMode={nerdMode}
         />
         <StatusBox
           title="Fatigue"
@@ -51,6 +70,7 @@ export default function DetectionStatus({
           goodText="Normal"
           warning={aiData && aiData.mar && aiData.mar > 0.35 && !aiData.yawning}
           warnText="Talking"
+          nerdMode={nerdMode}
         />
       </div>
     </div>
@@ -64,6 +84,7 @@ function StatusBox({
   badText,
   warning,
   warnText,
+  nerdMode,
 }: any) {
   // Logic for color states using the "Chocolate & Cream" palette
   let dotColor = "bg-[#A3B18A]"; // Sage Green
@@ -87,9 +108,11 @@ function StatusBox({
 
   return (
     <div
-      className={`bg-[#2A1E16]/60 p-3 sm:p-4 rounded-xl border transition-all duration-500 hover:scale-[1.02] ${borderColor}`}
+      className={`bg-[#2A1E16]/60 rounded-xl border transition-all duration-300 ${borderColor} ${
+        nerdMode ? "p-3 sm:p-4 hover:scale-[1.02]" : "p-2 sm:p-3 flex flex-col justify-center"
+      }`}
     >
-      <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#BFA899] mb-2">
+      <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-[#BFA899] mb-1.5">
         {title}
       </div>
       
@@ -105,7 +128,7 @@ function StatusBox({
         </div>
 
         {/* Status Label */}
-        <span className={`text-xs sm:text-sm font-bold tracking-tight truncate ${textColor}`}>
+        <span className={`text-xs font-bold tracking-tight truncate ${textColor}`}>
           {text}
         </span>
       </div>

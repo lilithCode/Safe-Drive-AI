@@ -67,7 +67,10 @@ The backend processes the video feed and calculates EAR (Eye Aspect Ratio).
    *We use a specific MediaPipe version to avoid compatibility errors with Python 3.12:*
    ```bash
    pip install fastapi uvicorn opencv-python numpy httpx
-   pip install mediapipe==0.10.13
+   pip i[k0haii@BlueBox backend]$ python3.12 -m venv venv
+bash: python3.12: command not found
+[k0haii@BlueBox backend]$ 
+nstall mediapipe==0.10.13
    ```
 4. **Start the AI Server:**
    ```bash

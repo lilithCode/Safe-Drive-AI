@@ -45,7 +45,7 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig }: Props)
       {/* Floating Calibration Card */}
       <div 
         ref={panelRef}
-        className="fixed top-6 right-6 bottom-6 w-full max-w-[420px] bg-[#120D0A] rounded-[2.5rem] z-[70] shadow-2xl border border-[#2A2421] translate-x-[110%] opacity-0 overflow-hidden flex flex-col"
+        className="fixed bottom-6 right-6 bottom-6 w-full max-w-[420px] max-h-[85vh] bg-[#120D0A] rounded-[2.5rem] z-[70] shadow-2xl border border-[#2A2421] translate-x-[110%] opacity-0 overflow-hidden flex flex-col"
       >
         {/* Header */}
         <div className="p-8 pb-4 flex items-center justify-between border-b border-[#2A2421]/50 bg-[#120D0A]/80 backdrop-blur-md sticky top-0 z-20">

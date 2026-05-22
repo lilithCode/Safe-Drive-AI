@@ -1,10 +1,19 @@
+
+
+"use client";
+
 import React from "react";
 
-export default function SafetyScore({ score }: { score: number }) {
+interface SafetyScoreProps {
+  score: number;
+  nerdMode: boolean; // Dynamic structure mode controller
+}
+
+export default function SafetyScore({ score, nerdMode }: SafetyScoreProps) {
   const roundedScore = Math.round(score);
 
   // Gauge Math
-  const strokeDasharray = 125.6; // Refined for the semi-circle path length
+  const strokeDasharray = 125.6; // Semi-circle path length
   const strokeDashoffset = strokeDasharray - (strokeDasharray * roundedScore) / 100;
 
   // Aesthetic Logic using the Refined Image Palette
@@ -25,7 +34,7 @@ export default function SafetyScore({ score }: { score: number }) {
         : "CRITICAL — PULL OVER IMMEDIATELY";
 
   return (
-    <div className="bg-[#3D2B1F] p-6 rounded-2xl border border-[#4D392C] flex flex-col items-center shadow-2xl relative overflow-hidden transition-all duration-500">
+    <div className="bg-[#3D2B1F] p-5 sm:p-6 rounded-2xl border border-[#4D392C] flex flex-col items-center shadow-2xl relative overflow-hidden transition-all duration-500">
       
       {/* Background Atmosphere - Using the color variable for the glow */}
       <div
@@ -34,7 +43,7 @@ export default function SafetyScore({ score }: { score: number }) {
       ></div>
 
       {/* Label with Luxury Tracking */}
-      <h3 className="text-[10px] font-bold text-[#E8B06F] uppercase tracking-[0.2em] w-full text-left mb-8 z-10 opacity-80">
+      <h3 className="text-[10px] font-bold text-[#E8B06F] uppercase tracking-[0.2em] w-full text-left mb-6 z-10 opacity-80">
         Performance Index
       </h3>
 
@@ -82,24 +91,25 @@ export default function SafetyScore({ score }: { score: number }) {
       </div>
 
       {/* Status Description */}
-      <p className={`text-[10px] font-bold tracking-widest uppercase mt-4 z-10 text-center ${score < 50 ? 'text-[#D9534F]' : 'text-[#BFA899]'}`}>
+      <p className={`text-[10px] font-bold tracking-widest uppercase mt-2 z-10 text-center ${score < 50 ? 'text-[#D9534F]' : 'text-[#BFA899]'}`}>
         {statusText}
       </p>
 
-      {/* Bottom Minimalist Progress Bar */}
-      <div className="w-full mt-8 flex items-center gap-4 z-10">
-        <span className="text-[9px] font-black text-[#4D392C] uppercase">Min</span>
-        <div className="flex-1 h-[4px] bg-[#4D392C] rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-1000 relative"
-            style={{ width: `${roundedScore}%`, backgroundColor: color }}
-          >
-            {/* Glossy overlay on the bar */}
-            <div className="absolute inset-0 bg-white/10"></div>
+      {/* Bottom Minimalist Progress Bar - Rendered purely in Nerd Mode calibration */}
+      {nerdMode && (
+        <div className="w-full mt-6 flex items-center gap-4 z-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <span className="text-[9px] font-black text-[#4D392C] uppercase">Min</span>
+          <div className="flex-1 h-[4px] bg-[#4D392C] rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-1000 relative"
+              style={{ width: `${roundedScore}%`, backgroundColor: color }}
+            >
+              <div className="absolute inset-0 bg-white/10"></div>
+            </div>
           </div>
+          <span className="text-[9px] font-black text-[#4D392C] uppercase">Max</span>
         </div>
-        <span className="text-[9px] font-black text-[#4D392C] uppercase">Max</span>
-      </div>
+      )}
     </div>
   );
 }

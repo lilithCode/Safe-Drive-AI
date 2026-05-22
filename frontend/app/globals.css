@@ -43,3 +43,11 @@ body {
   color: var(--text-primary);
   font-family: var(--font-space), sans-serif;
 }
+
+
+/* Optimization hooks for complex real-time filter rendering */
+.dynamic-blur-engine {
+  will-change: filter, opacity;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}

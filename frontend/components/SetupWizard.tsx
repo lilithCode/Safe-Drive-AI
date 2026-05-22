@@ -1,7 +1,9 @@
+
+
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Shield, CheckCircle2, Loader2, QrCode, Server, Smartphone, ArrowRight } from "lucide-react";
+import { User, Shield, CheckCircle2, Loader2, QrCode, Server, Smartphone, Plus, Trash2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 interface Props {
@@ -9,18 +11,17 @@ interface Props {
 }
 
 export default function SetupWizard({ onComplete }: Props) {
-  const [step, setStep] = useState(0); // Now starts at Step 0: Protocol Selection
+  const [step, setStep] = useState(0); 
   const [qrCode, setQrCode] = useState("");
   const [status, setStatus] = useState("INITIALIZING");
+  
   const [formData, setFormData] = useState({
-    senderMode: "SYSTEM", // "SYSTEM" or "PERSONAL"
+    senderMode: "SYSTEM", 
     driverName: "",
     driverNumber: "",
-    guardianName: "",
-    guardianNumber: "",
+    guardians: [{ name: "", phone: "" }], 
   });
 
-  // Polling logic: Only ask bridge for QR if user chooses PERSONAL mode
   useEffect(() => {
     if (step === 3 && formData.senderMode === "PERSONAL" && formData.driverNumber) {
       const interval = setInterval(async () => {
@@ -45,9 +46,30 @@ export default function SetupWizard({ onComplete }: Props) {
     onComplete(formData);
   };
 
+  const handleGuardianChange = (index: number, key: "name" | "phone", value: string) => {
+    const updatedGuardians = [...formData.guardians];
+    updatedGuardians[index][key] = value;
+    setFormData({ ...formData, guardians: updatedGuardians });
+  };
+
+  const addGuardianField = () => {
+    setFormData({
+      ...formData,
+      guardians: [...formData.guardians, { name: "", phone: "" }]
+    });
+  };
+
+  const removeGuardianField = (index: number) => {
+    if (formData.guardians.length === 1) return;
+    const updatedGuardians = formData.guardians.filter((_, i) => i !== index);
+    setFormData({ ...formData, guardians: updatedGuardians });
+  };
+
+  const isGuardianStepValid = formData.guardians.every(g => g.name.trim() !== "" && g.phone.trim() !== "");
+
   return (
-    <div className="fixed inset-0 z-[100] bg-[#120D0A] flex items-center justify-center p-4 font-sans">
-      <div className="bg-[#1C1714] border border-[#2A2421] w-full max-w-md rounded-3xl p-8 shadow-2xl text-white">
+    <div className="fixed inset-0 z-[100] bg-[#120D0A] flex items-center justify-center p-4 font-sans overflow-y-auto">
+      <div className="bg-[#1C1714] border border-[#2A2421] w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl text-white my-auto max-h-[95vh] flex flex-col">
 
         {/* --- STEP 0: PROTOCOL SELECTION --- */}
         {step === 0 && (
@@ -85,34 +107,62 @@ export default function SetupWizard({ onComplete }: Props) {
 
         {/* --- COMMON HEADER FOR STEPS 1-3 --- */}
         {step > 0 && (
-            <div className="text-center mb-8 animate-in fade-in slide-in-from-bottom-4">
-                <div className="w-16 h-16 bg-[#FF954F]/10 rounded-2xl flex items-center justify-center text-[#FF954F] mx-auto mb-4 border border-[#FF954F]/20">
-                    {step === 1 ? <User size={32} /> : step === 2 ? <Shield size={32} /> : <QrCode size={32} />}
+            <div className="text-center mb-5 shrink-0 animate-in fade-in slide-in-from-bottom-4">
+                <div className="w-14 h-14 bg-[#FF954F]/10 rounded-2xl flex items-center justify-center text-[#FF954F] mx-auto mb-3 border border-[#FF954F]/20">
+                    {step === 1 ? <User size={28} /> : step === 2 ? <Shield size={28} /> : <QrCode size={28} />}
                 </div>
-                <h2 className="text-2xl font-black uppercase tracking-tighter">
-                    {step === 1 ? "Driver Profile" : step === 2 ? "Guardian Info" : "Link Device"}
+                <h2 className="text-xl font-black uppercase tracking-tighter">
+                    {step === 1 ? "Driver Profile" : step === 2 ? "Guardian List Network" : "Link Device"}
                 </h2>
             </div>
         )}
 
         {step === 1 && (
-          <div className="space-y-4 animate-in slide-in-from-right duration-300">
+          <div className="space-y-4 overflow-y-auto pr-1 animate-in slide-in-from-right duration-300">
             <InputField label="Full Name" value={formData.driverName} onChange={(v: any) => setFormData({ ...formData, driverName: v })} />
             <InputField label="Your Phone" placeholder="923XXXXXXXXX" value={formData.driverNumber} onChange={(v: any) => setFormData({ ...formData, driverNumber: v })} />
-            <button onClick={() => setStep(2)} disabled={!formData.driverName || !formData.driverNumber} className="w-full py-4 bg-[#FF954F] text-[#120D0A] rounded-xl font-black text-xs uppercase tracking-widest mt-4">Continue</button>
+            <button onClick={() => setStep(2)} disabled={!formData.driverName || !formData.driverNumber} className="w-full py-4 bg-[#FF954F] text-[#120D0A] rounded-xl font-black text-xs uppercase tracking-widest mt-4 disabled:opacity-40 transition-opacity">Continue</button>
           </div>
         )}
 
         {step === 2 && (
-          <div className="space-y-4 animate-in slide-in-from-right duration-300">
-            <InputField label="Guardian Name" value={formData.guardianName} onChange={(v: any) => setFormData({ ...formData, guardianName: v })} />
-            <InputField label="Guardian WhatsApp" placeholder="923XXXXXXXXX" value={formData.guardianNumber} onChange={(v: any) => setFormData({ ...formData, guardianNumber: v })} />
-            <div className="flex gap-2 mt-4">
+          <div className="flex flex-col flex-1 overflow-hidden animate-in slide-in-from-right duration-300">
+            <div className="space-y-5 overflow-y-auto flex-1 pr-1 max-h-[40vh] custom-setup-scrollbar">
+              {formData.guardians.map((guardian, index) => (
+                <div key={index} className="p-4 bg-[#120D0A] border border-[#2A2421] rounded-2xl relative space-y-3 group/field">
+                  {formData.guardians.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeGuardianField(index)}
+                      className="absolute top-3 right-3 text-[#8E8884] hover:text-[#D9534F] transition-colors p-1"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                  <div className="text-[9px] font-black text-[#FF954F] uppercase tracking-wider">
+                    Contact Target #{index + 1}
+                  </div>
+                  <InputField label="Guardian Name" value={guardian.name} onChange={(v: any) => handleGuardianChange(index, "name", v)} />
+                  <InputField label="Guardian WhatsApp" placeholder="923XXXXXXXXX" value={guardian.phone} onChange={(v: any) => handleGuardianChange(index, "phone", v)} />
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={addGuardianField}
+              className="mt-3 w-full py-2.5 border border-dashed border-[#2A2421] text-[#FF954F] bg-[#FF954F]/5 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-[#FF954F]/10 transition-all select-none shrink-0"
+            >
+              <Plus size={14} strokeWidth={3} />
+              Add Extra Guardian Field
+            </button>
+
+            <div className="flex gap-2 mt-5 shrink-0">
                 <button onClick={() => setStep(1)} className="flex-1 py-4 border border-[#2A2421] rounded-xl font-black text-xs uppercase tracking-widest hover:bg-white/5 transition-colors">Back</button>
                 <button 
                     onClick={() => formData.senderMode === "SYSTEM" ? handleSave() : setStep(3)} 
-                    disabled={!formData.guardianName || !formData.guardianNumber}
-                    className="flex-[2] py-4 bg-[#FF954F] text-[#120D0A] rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:bg-[#FFC76E]"
+                    disabled={!isGuardianStepValid}
+                    className="flex-[2] py-4 bg-[#FF954F] text-[#120D0A] rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all hover:bg-[#FFC76E] disabled:opacity-40"
                 >
                     {formData.senderMode === "SYSTEM" ? "Complete Setup" : "Next: Link WA"}
                 </button>
@@ -121,29 +171,42 @@ export default function SetupWizard({ onComplete }: Props) {
         )}
 
         {step === 3 && (
-          <div className="flex flex-col items-center text-center space-y-6 animate-in zoom-in duration-500">
-            <div className="p-4 bg-white rounded-2xl shadow-xl">
+          <div className="flex flex-col items-center text-center space-y-6 overflow-y-auto animate-in zoom-in duration-500">
+            <div className="p-4 bg-white rounded-2xl shadow-xl shrink-0">
               {qrCode ? <QRCodeSVG value={qrCode} size={200} /> : (
                 <div className="w-[200px] h-[200px] flex items-center justify-center bg-zinc-100 rounded-xl text-zinc-400">
                   {status === "CONNECTED" ? <CheckCircle2 size={48} className="text-green-500 animate-bounce" /> : <Loader2 size={40} className="animate-spin" />}
                 </div>
               )}
             </div>
-            <div className="py-2 px-4 bg-[#120D0A] rounded-full border border-[#2A2421]">
+            <div className="py-2 px-4 bg-[#120D0A] rounded-full border border-[#2A2421] shrink-0">
               <span className="text-[10px] font-black uppercase tracking-widest text-[#FF954F]">Status: {status.replace(/_/g, " ")}</span>
             </div>
           </div>
         )}
       </div>
+
+      <style jsx global>{`
+        .custom-setup-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-setup-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-setup-scrollbar::-webkit-scrollbar-thumb { background: #2A2421; border-radius: 10px; }
+        .custom-setup-scrollbar::-webkit-scrollbar-thumb:hover { background: #FF954F; }
+      `}</style>
     </div>
   );
 }
 
 function InputField({ label, value, onChange, placeholder }: any) {
   return (
-    <div className="flex flex-col gap-2 text-left">
-      <label className="text-[9px] font-black text-[#8E8884] uppercase tracking-widest ml-1">{label}</label>
-      <input type="text" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="bg-[#120D0A] border border-[#2A2421] rounded-xl px-4 py-4 text-white text-sm focus:outline-none focus:border-[#FF954F] transition-all" />
+    <div className="flex flex-col gap-1.5 text-left w-full">
+      <label className="text-[8px] font-black text-[#8E8884] uppercase tracking-widest ml-0.5">{label}</label>
+      <input 
+        type="text" 
+        value={value} 
+        placeholder={placeholder} 
+        onChange={(e) => onChange(e.target.value)} 
+        className="bg-[#120D0A] border border-[#2A2421] rounded-xl px-3.5 py-3 text-white text-xs focus:outline-none focus:border-[#FF954F] transition-all w-full font-medium" 
+      />
     </div>
   );
 }
