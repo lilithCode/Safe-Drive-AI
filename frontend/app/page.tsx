@@ -16,6 +16,7 @@ import EmergencyContacts from "../components/EmergencyContacts";
 import StartScreen from "../components/StartScreen";
 import SettingsPanel from "../components/SettingsPanel";
 import SetupWizard from "../components/SetupWizard";
+import { useAudio } from "../hooks/useAudio"; 
 
 const MemoHeader = memo(Header);
 const MemoVideoFeed = memo(VideoFeed);
@@ -31,8 +32,14 @@ export default function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // --- REFS & TIMERS ---
-  const drowsyTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // --- AUDIO & VOICE ---
+  const { playAlarm, speak } = useAudio();
+  const lastVoiceAlertRef = useRef<number>(0);
+  const VOICE_COOLDOWN = 5000; 
+
+  // --- REFS & PERSISTENCE TIMERS ---
+  const warningTimerRef = useRef<NodeJS.Timeout | null>(null); // For Audio
+  const drowsyTimerRef = useRef<NodeJS.Timeout | null>(null);  // For SOS
   const isAutoSOSTriggered = useRef(false);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const driveStartTime = useRef<number>(Date.now());
@@ -53,11 +60,22 @@ export default function Dashboard() {
   const [userConfig, setUserConfig] = useState<any>(null);
   const [needsSetup, setNeedsSetup] = useState(false);
 
-  // --- 1. CONFIG LOADER & REFRESHER ---
+  // --- 1. CONFIG LOADER & HYDRATION ---
   const refreshConfig = useCallback(() => {
     const savedConfig = localStorage.getItem("safedrive_user_config");
     if (savedConfig) {
-      setUserConfig(JSON.parse(savedConfig));
+      let parsed = JSON.parse(savedConfig);
+      
+      // Safety Hydration: Ensure new timer keys exist
+      let needsUpdate = false;
+      if (parsed.alarmEnabled === undefined) { parsed.alarmEnabled = true; needsUpdate = true; }
+      if (parsed.voiceEnabled === undefined) { parsed.voiceEnabled = true; needsUpdate = true; }
+      if (parsed.warningDelay === undefined) { parsed.warningDelay = 1.5; needsUpdate = true; }
+      if (parsed.sosDelay === undefined) { parsed.sosDelay = 3.5; needsUpdate = true; }
+      
+      if (needsUpdate) localStorage.setItem("safedrive_user_config", JSON.stringify(parsed));
+      
+      setUserConfig(parsed);
       setNeedsSetup(false);
     } else {
       setNeedsSetup(true);
@@ -81,28 +99,24 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (appState !== "DRIVING") return;
-    driveStartTime.current = Date.now();
     const interval = setInterval(() => {
       setDriveTime(Math.floor((Date.now() - driveStartTime.current) / 1000));
     }, 1000);
     return () => clearInterval(interval);
   }, [appState]);
 
-  // --- 2. SOS EXECUTION (UPDATED FOR GLOBAL LOOP) ---
+  // --- 2. SOS EXECUTION ---
   const executeSOS = useCallback(async (targetPhone?: string) => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     setSosCountdown(null);
     setIsEmergency(true);
     
-    addLog("SOS EXECUTED", "Broadcasting emergency packets to guardians.", "critical");
+    addLog("SOS EXECUTED", "Sequential emergency packets initiated.", "critical");
+    if (userConfig?.voiceEnabled) speak("Emergency sequence confirmed. Alerting guardians.");
 
     if (!userConfig) return;
     const activeId = userConfig.senderMode === "SYSTEM" ? "SYSTEM_ADMIN" : userConfig.driverNumber;
-
-    // Determine who receives the alert
-    const targetList = targetPhone 
-        ? [targetPhone] 
-        : userConfig.guardians.map((g: any) => g.phone);
+    const targetList = targetPhone ? [targetPhone] : userConfig.guardians.map((g: any) => g.phone);
 
     const sendPacketToTarget = async (phone: string, isFollowUp: boolean, lat: number | null, lng: number | null, video: string | null) => {
       const screenshot = webcamRef.current?.getScreenshot();
@@ -125,7 +139,6 @@ export default function Dashboard() {
     };
 
     // Video Recording Logic
-    let capturedVideo: string | null = null;
     const stream = (webcamRef.current?.video as any)?.srcObject as MediaStream;
     if (stream) {
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -136,8 +149,7 @@ export default function Dashboard() {
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         reader.onloadend = async () => {
-          capturedVideo = reader.result as string;
-          // Send video to all targets
+          const capturedVideo = reader.result as string;
           for (const phone of targetList) {
              await sendPacketToTarget(phone, true, null, null, capturedVideo);
           }
@@ -147,7 +159,7 @@ export default function Dashboard() {
       setTimeout(() => { if(mediaRecorder.state !== "inactive") mediaRecorder.stop() }, 5000);
     }
 
-    // Geolocation & Initial Alert
+    // Geolocation & Sequential Chain
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
@@ -155,8 +167,8 @@ export default function Dashboard() {
           const lng = pos.coords.longitude;
           for (const phone of targetList) {
             await sendPacketToTarget(phone, false, lat, lng, null); // Initial
-            setTimeout(() => sendPacketToTarget(phone, true, null, null, null), 5000);  // Pic 2
-            setTimeout(() => sendPacketToTarget(phone, true, null, null, null), 10000); // Pic 3
+            setTimeout(() => sendPacketToTarget(phone, true, null, null, null), 5000); 
+            setTimeout(() => sendPacketToTarget(phone, true, null, null, null), 10000);
           }
         },
         async () => {
@@ -167,13 +179,14 @@ export default function Dashboard() {
         }
       );
     }
-  }, [userConfig, addLog]);
+  }, [userConfig, addLog, speak]);
 
   const triggerSOS = useCallback((type: "AI" | "MANUAL", targetPhone?: string) => {
     if (isEmergency || sosCountdown !== null) return;
     if (type === "MANUAL") executeSOS(targetPhone);
     else {
       setSosCountdown(5);
+      if (userConfig?.voiceEnabled) speak("Critical alert! Initializing emergency sequence.");
       countdownIntervalRef.current = setInterval(() => {
         setSosCountdown((prev) => {
           if (prev === null) return null;
@@ -182,22 +195,26 @@ export default function Dashboard() {
         });
       }, 1000);
     }
-  }, [isEmergency, sosCountdown, executeSOS]);
+  }, [isEmergency, sosCountdown, executeSOS, speak, userConfig]);
 
+  // --- 3. RECOVERY ---
   const resetEmergency = () => {
     setIsEmergency(false);
     isAutoSOSTriggered.current = false;
     setSosCountdown(null);
     setSafetyScore(100);
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    if (userConfig?.voiceEnabled) speak("Safety mode resumed.");
   };
 
-  useGSAP(() => {
-    if (appState !== "DRIVING") return;
-    gsap.set(".dashboard-animate", { opacity: 0, y: 20 });
-    gsap.to(".dashboard-animate", { opacity: 1, y: 0, stagger: 0.06, ease: "power2.out", duration: 0.8 });
-  }, { dependencies: [appState], scope: containerRef });
+  const cancelPendingAISOS = () => {
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setSosCountdown(null);
+    isAutoSOSTriggered.current = false;
+    addLog("SOS ABORTED", "Driver dismissed the AI alert.", "warning");
+  };
 
+  // --- 4. AI WEBSOCKET & PERSISTENCE ENGINE ---
   useEffect(() => {
     if (appState !== "DRIVING" || isEmergency) return;
     const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
@@ -215,32 +232,66 @@ export default function Dashboard() {
       try {
         const rawData: AIResponse = JSON.parse(event.data);
         setAiData(rawData);
+        
+        // Safety Score
         setSafetyScore(prev => {
             let p = 0;
             if (rawData.drowsy) p += 4;
             if (rawData.phone_detected) p += 4;
+            if (rawData.head_distracted) p += 1.5;
             if (p > 0) return Math.max(0, prev - p);
             return Math.min(100, prev + 0.3);
         });
-        if (rawData.drowsy && !isEmergency && !isAutoSOSTriggered.current && sosCountdown === null) {
-          if (!drowsyTimerRef.current) {
-            drowsyTimerRef.current = setTimeout(() => { isAutoSOSTriggered.current = true; triggerSOS("AI"); }, 3000);
-          }
-        } else if (!rawData.drowsy && drowsyTimerRef.current) {
-          clearTimeout(drowsyTimerRef.current);
-          drowsyTimerRef.current = null;
+
+        // --- PERSISTENCE & TIMING ENGINE ---
+        const warnDelay = (userConfig?.warningDelay || 1.5) * 1000;
+        const sosDelay = (userConfig?.sosDelay || 3.5) * 1000;
+        const now = Date.now();
+        const canSpeak = now - lastVoiceAlertRef.current > VOICE_COOLDOWN;
+
+        if (rawData.drowsy || rawData.phone_detected || rawData.head_distracted) {
+            // A. Handle Warning (Audio)
+            if (!warningTimerRef.current) {
+                warningTimerRef.current = setTimeout(() => {
+                    if (rawData.drowsy && userConfig?.alarmEnabled) playAlarm();
+                    if (canSpeak && userConfig?.voiceEnabled) {
+                        speak(rawData.drowsy ? "Wake up!" : "Look at the road!");
+                        lastVoiceAlertRef.current = now;
+                    }
+                    addLog("Distraction", "Persistence threshold met.", "warning");
+                }, warnDelay);
+            }
+
+            // B. Handle SOS Trigger (Only for sleep or mobile)
+            const isCritical = rawData.drowsy || rawData.phone_detected;
+            if (isCritical && !isAutoSOSTriggered.current && !sosCountdown) {
+                if (!drowsyTimerRef.current) {
+                    drowsyTimerRef.current = setTimeout(() => {
+                        isAutoSOSTriggered.current = true;
+                        triggerSOS("AI");
+                    }, sosDelay);
+                }
+            }
+        } else {
+            // C. RESET TIMERS (Blink Safety)
+            if (warningTimerRef.current) { clearTimeout(warningTimerRef.current); warningTimerRef.current = null; }
+            if (drowsyTimerRef.current) { clearTimeout(drowsyTimerRef.current); drowsyTimerRef.current = null; }
         }
-        if (rawData?.alert) addLog("Detection", rawData.alert, "warning");
+
       } catch (err) { console.error(err); }
     };
-    return () => { if (wsRef.current) wsRef.current.close(); };
-  }, [appState, isEmergency, triggerSOS, sosCountdown, addLog]);
+    return () => { 
+        if (wsRef.current) wsRef.current.close(); 
+        if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+        if (drowsyTimerRef.current) clearTimeout(drowsyTimerRef.current);
+    };
+  }, [appState, isEmergency, triggerSOS, sosCountdown, addLog, playAlarm, speak, userConfig]);
 
   if (needsSetup) return <SetupWizard onComplete={(data) => { setUserConfig(data); setNeedsSetup(false); }} />;
   if (appState !== "DRIVING") return <StartScreen appState={appState} onInitialize={() => { setAppState("INITIALIZING"); setTimeout(() => setAppState("READY"), 1500); }} onStart={() => setAppState("DRIVING")} />;
 
   return (
-    <div ref={containerRef} className="h-screen bg-[var(--background)] text-white p-4 overflow-scroll flex flex-col font-sans">
+    <div ref={containerRef} className="h-screen bg-[var(--background)] text-white p-4 overflow-hidden flex flex-col font-sans">
       <div className="max-w-[1700px] mx-auto w-full flex-1 flex flex-col">
         <MemoHeader isConnected={isConnected} isEmergency={isEmergency} onOpenSettings={() => setIsSettingsOpen(true)} onOpenAnalytics={() => setIsHistoryOpen(true)} nerdMode={nerdMode} setNerdMode={setNerdMode} isModalOpen={isHistoryOpen} />
 
@@ -250,7 +301,7 @@ export default function Dashboard() {
               <MemoVideoFeed webcamRef={webcamRef} canvasRef={canvasRef} aiData={aiData} isEmergency={isEmergency} alertsToday={alertsToday} driveTime={driveTime} safetyScore={safetyScore} nerdMode={nerdMode} />
               {isEmergency && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] z-50 animate-in fade-in">
-                  <button onClick={resetEmergency} className="bg-white text-black px-10 py-5 rounded-full font-black uppercase shadow-2xl flex items-center gap-2"><CheckCircle size={20} className="text-green-600"/> I am Safe - Resume AI</button>
+                  <button onClick={resetEmergency} className="group flex items-center gap-3 bg-white text-black px-10 py-5 rounded-full font-black uppercase shadow-2xl hover:scale-105 active:scale-95 transition-all"><CheckCircle className="text-green-600 w-6 h-6"/> I am Safe - Resume AI</button>
                 </div>
               )}
             </div>
@@ -260,6 +311,7 @@ export default function Dashboard() {
                 </div>
             )}
           </div>
+
           <div className={`${nerdMode ? "lg:col-span-4" : "lg:col-span-3"} flex flex-col gap-4 min-h-0 overflow-y-auto pr-1 custom-scrollbar transition-all duration-500`}>
             <MemoSafetyScore score={safetyScore} nerdMode={nerdMode} />
             {nerdMode && <div className="animate-in slide-in-from-right duration-500"><MemoDetectionStatus aiData={aiData} nerdMode={true} /></div>}
@@ -267,13 +319,18 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* SOS MODAL */}
         {sosCountdown !== null && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="bg-[var(--card)] border-2 border-[var(--alert)] w-full max-w-lg rounded-[3rem] p-10 text-center relative overflow-hidden shadow-2xl">
-                <div className="text-9xl font-black text-white tabular-nums my-10">{sosCountdown}</div>
-                <div className="flex gap-4">
-                  <button onClick={cancelPendingAISOS} className="flex-1 py-5 bg-white/5 border border-white/10 rounded-2xl font-black uppercase text-white">Abort</button>
-                  <button onClick={() => executeSOS()} className="flex-1 py-5 bg-[var(--alert)] text-white rounded-2xl font-black uppercase">Send Now</button>
+            <div className="bg-[var(--card)] border-2 border-[var(--alert)] w-full max-w-lg rounded-[3rem] p-10 text-center relative overflow-hidden shadow-2xl font-sans">
+                <div className="relative z-10">
+                    <div className="p-4 bg-[var(--alert)]/10 rounded-full text-[var(--alert)] w-fit mx-auto mb-6 animate-bounce"><ShieldAlert size={56} /></div>
+                    <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter">AI ALERT DETECTED</h2>
+                    <div className="text-9xl font-black text-white tabular-nums my-10">{sosCountdown}</div>
+                    <div className="flex gap-4">
+                      <button onClick={cancelPendingAISOS} className="flex-1 py-5 bg-white/5 border border-white/10 rounded-2xl font-black uppercase text-white hover:bg-white/10 transition-colors">Abort</button>
+                      <button onClick={() => executeSOS()} className="flex-1 py-5 bg-[var(--alert)] text-white rounded-2xl font-black uppercase shadow-xl hover:bg-red-600 transition-colors">Send Now</button>
+                    </div>
                 </div>
             </div>
           </div>
@@ -297,8 +354,8 @@ function HistoryModalWrapper({ logs, onClose }: { logs: any[]; onClose: () => vo
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div ref={backdropRef} className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={onClose} />
-      <div ref={modalRef} className="relative w-full max-w-4xl h-[80vh] bg-[var(--card)] rounded-3xl border border-[var(--border)] p-6 shadow-2xl z-10 flex flex-col overflow-hidden">
-        <button onClick={onClose} className="absolute top-4 right-4 text-[10px] font-black uppercase text-[var(--text-secondary)] hover:text-white">✕ Close Terminal</button>
+      <div ref={modalRef} className="relative w-full max-w-4xl h-[80vh] bg-[var(--card)] rounded-3xl border border-[var(--border)] p-6 shadow-2xl z-10 flex flex-col overflow-hidden font-sans">
+        <button onClick={onClose} className="absolute top-4 right-4 text-[10px] font-black uppercase text-[var(--text-secondary)] hover:text-white transition-colors">✕ Close Terminal</button>
         <div className="flex-1 w-full h-full overflow-hidden mt-8"><MemoAlertHistory logs={logs} isModalView={true} /></div>
       </div>
     </div>

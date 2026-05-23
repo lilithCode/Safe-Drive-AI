@@ -9,16 +9,17 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onResetConfig: () => void;
-  refreshConfig: () => void; // Crucial: This updates the Dashboard UI immediately
+  refreshConfig: () => void; 
 }
 
 export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshConfig }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  // --- INTERNAL STATE ---
-  const [eyeSize, setEyeSize] = useState("Medium");
-  const [sosDelay, setSosDelay] = useState(3.0);
+  // --- INTERNAL UI STATES ---
+  const [eyeSensitivity, setEyeSensitivity] = useState(0.25);
+  const [warningDelay, setWarningDelay] = useState(1.5);
+  const [sosDelay, setSosDelay] = useState(3.5);
   const [showMesh, setShowMesh] = useState(true);
   const [alarmEnabled, setAlarmEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
@@ -29,32 +30,36 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshC
   const [newGuardian, setNewGuardian] = useState({ name: "", number: "" });
   const [inputError, setInputError] = useState("");
 
-  // Load existing config on open
+  // Load existing config into UI states whenever panel opens
   useEffect(() => {
     if (isOpen) {
       const config = localStorage.getItem("safedrive_user_config");
       if (config) {
         const parsed = JSON.parse(config);
         setGuardians(parsed.guardians || []);
-        if (parsed.eyeSize) setEyeSize(parsed.eyeSize);
-        if (parsed.sosDelay) setSosDelay(parsed.sosDelay);
+        setEyeSensitivity(parsed.eyeSensitivity || 0.25);
+        setWarningDelay(parsed.warningDelay || 1.5);
+        setSosDelay(parsed.sosDelay || 3.5);
+        setAlarmEnabled(parsed.alarmEnabled !== false);
+        setVoiceEnabled(parsed.voiceEnabled !== false);
+        setShowMesh(parsed.showMesh !== false);
       }
     }
   }, [isOpen]);
 
-  // --- LOGIC: SAVE CHANGES ---
+  // --- LOGIC: SAVE & SYNC ---
   const syncToStorage = (updatedFields: any) => {
     const config = JSON.parse(localStorage.getItem("safedrive_user_config") || "{}");
     const newConfig = { ...config, ...updatedFields };
     localStorage.setItem("safedrive_user_config", JSON.stringify(newConfig));
-    refreshConfig(); // Force Dashboard to see new data
+    refreshConfig(); // Notifies Dashboard to update its logic immediately
   };
 
   const handleAddGuardian = () => {
     const { name, number } = newGuardian;
     if (!name) return setInputError("Name is required");
     if (!number.startsWith("03")) return setInputError("Must start with '03'");
-    if (number.length !== 11) return setInputError("Must be exactly 11 digits");
+    if (number.length !== 11) return setInputError("Exactly 11 digits required");
 
     const formattedNumber = "92" + number.substring(1);
     const updatedList = [...guardians, { name, phone: formattedNumber }];
@@ -107,27 +112,45 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshC
 
         <div className="flex-1 overflow-y-auto px-8 py-8 space-y-10 custom-scrollbar">
           
-          {/* Section: AI Vision */}
+          {/* Section: AI Perception */}
           <section className="space-y-6">
             <div className="flex items-center gap-2 text-[#FF954F]">
               <Eye size={14} />
-              <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">Eye sensitivity</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">AI Perception</h3>
             </div>
-            <div className="grid grid-cols-3 gap-2 bg-[#1C1714] p-1.5 rounded-2xl border border-[#2A2421]">
-                {["Small", "Medium", "Large"].map((size) => (
-                    <button 
-                        key={size} 
-                        onClick={() => { setEyeSize(size); syncToStorage({ eyeSize: size }); }}
-                        className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${eyeSize === size ? "bg-[#FF954F] text-[#120D0A]" : "text-[#8E8884] hover:text-white"}`}
-                    >
-                        {size}
-                    </button>
+            
+            {/* Eye Sensitivity Mapper */}
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-[#8E8884] uppercase tracking-widest ml-1">Eye Sensitivity</label>
+              <div className="grid grid-cols-3 gap-2 bg-[#1C1714] p-1.5 rounded-2xl border border-[#2A2421]">
+                {[
+                    { label: "Small", val: 0.20 }, 
+                    { label: "Medium", val: 0.25 }, 
+                    { label: "Large", val: 0.30 }
+                ].map((opt) => (
+                  <button 
+                    key={opt.label} 
+                    onClick={() => { setEyeSensitivity(opt.val); syncToStorage({ eyeSensitivity: opt.val }); }} 
+                    className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${eyeSensitivity === opt.val ? "bg-[#FF954F] text-[#120D0A]" : "text-[#8E8884] hover:text-white"}`}
+                  >
+                    {opt.label}
+                  </button>
                 ))}
+              </div>
             </div>
+
+            {/* Delay Sliders */}
             <SliderSetting 
-                label="Auto-SOS Timer" 
+                label="Warning Audio Delay" 
+                value={warningDelay} 
+                min={0.5} max={2.0} 
+                unit="s" 
+                onChange={(e: any) => { const v = parseFloat(e.target.value); setWarningDelay(v); syncToStorage({ warningDelay: v }); }} 
+            />
+            <SliderSetting 
+                label="SOS Trigger Delay" 
                 value={sosDelay} 
-                min={1.0} max={10.0} 
+                min={2.5} max={5.0} 
                 unit="s" 
                 onChange={(e: any) => { const v = parseFloat(e.target.value); setSosDelay(v); syncToStorage({ sosDelay: v }); }} 
             />
@@ -140,8 +163,16 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshC
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">Audio Feedback</h3>
             </div>
             <div className="space-y-3">
-              <ToggleSetting label="Master Alarm Beep" checked={alarmEnabled} onClick={() => setAlarmEnabled(!alarmEnabled)} />
-              <ToggleSetting label="AI Voice Assistance" checked={voiceEnabled} onClick={() => setVoiceEnabled(!voiceEnabled)} />
+              <ToggleSetting 
+                label="Master Alarm Beep" 
+                checked={alarmEnabled} 
+                onClick={() => { setAlarmEnabled(!alarmEnabled); syncToStorage({ alarmEnabled: !alarmEnabled }); }} 
+              />
+              <ToggleSetting 
+                label="AI Voice Assistance" 
+                checked={voiceEnabled} 
+                onClick={() => { setVoiceEnabled(!voiceEnabled); syncToStorage({ voiceEnabled: !voiceEnabled }); }} 
+              />
             </div>
           </section>
 
@@ -156,7 +187,7 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshC
             </div>
             <div className="space-y-3">
                {guardians.map((g, i) => (
-                 <div key={i} className="flex items-center justify-between bg-[#1C1714] border border-[#2A2421] p-4 rounded-2xl">
+                 <div key={i} className="flex items-center justify-between bg-[#1C1714] border border-[#2A2421] p-4 rounded-2xl group">
                     <div className="flex items-center gap-4">
                         <div className="w-8 h-8 rounded-lg bg-[#120D0A] flex items-center justify-center text-[10px] font-black text-[#FF954F] border border-[#2A2421] uppercase">{g.name.charAt(0)}</div>
                         <div className="flex flex-col">
@@ -176,7 +207,11 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshC
               <Monitor size={14} />
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">HUD Visuals</h3>
             </div>
-            <ToggleSetting label="Show Face Mesh in HUD" checked={showMesh} onClick={() => setShowMesh(!showMesh)} />
+            <ToggleSetting 
+                label="Show Face Mesh" 
+                checked={showMesh} 
+                onClick={() => { setShowMesh(!showMesh); syncToStorage({ showMesh: !showMesh }); }} 
+            />
           </section>
 
           {/* Section: Maintenance */}
@@ -185,7 +220,7 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshC
               <RefreshCcw size={14} />
               <h3 className="text-[10px] font-black uppercase tracking-[0.2em]">Maintenance</h3>
             </div>
-            <button onClick={() => { if(window.confirm("RESET CONFIGURATION?")) onResetConfig(); }} className="w-full py-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all border border-red-500/20">Wipe Profile Data</button>
+            <button onClick={() => { if(window.confirm("RESET EVERYTHING?")) onResetConfig(); }} className="w-full py-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all border border-red-500/20">Wipe System Profile</button>
           </section>
         </div>
 
@@ -200,10 +235,10 @@ export default function SettingsPanel({ isOpen, onClose, onResetConfig, refreshC
                </div>
                <div className="space-y-4">
                   <InputField label="Name" placeholder="Ahmed Ali" value={newGuardian.name} onChange={(e:any) => setNewGuardian({...newGuardian, name: e.target.value})} />
-                  <InputField label="WhatsApp Number (03xxxxxxxxx)" placeholder="03XXXXXXXXX" maxLength={11} value={newGuardian.number} onChange={(e:any) => setNewGuardian({...newGuardian, number: e.target.value})} />
+                  <InputField label="WhatsApp Number" placeholder="03XXXXXXXXX" maxLength={11} value={newGuardian.number} onChange={(e:any) => setNewGuardian({...newGuardian, number: e.target.value})} />
                   {inputError && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2"><AlertCircle size={14}/> {inputError}</div>}
                   <div className="flex gap-2 pt-4">
-                    <button onClick={() => setIsAddModalOpen(false)} className="flex-1 py-4 border border-[#2A2421] rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
+                    <button onClick={() => { setIsAddModalOpen(false); setInputError(""); }} className="flex-1 py-4 border border-[#2A2421] rounded-xl font-black text-[10px] uppercase text-white">Cancel</button>
                     <button onClick={handleAddGuardian} className="flex-[2] py-4 bg-[#4ADE80] text-[#120D0A] rounded-xl font-black text-[10px] uppercase shadow-lg flex items-center justify-center gap-2"><CheckCircle2 size={16}/> Save Contact</button>
                   </div>
                </div>
@@ -237,7 +272,7 @@ function SliderSetting({ label, value, min, max, unit = "", onChange }: any) {
         <label className="text-[10px] font-black text-[#8E8884] uppercase tracking-widest">{label}</label>
         <span className="text-xs font-black text-white bg-[#1C1714] px-3 py-1 rounded-lg border border-[#2A2421] tabular-nums">{value}{unit}</span>
       </div>
-      <input type="range" min={min} max={max} step="0.5" value={value} onChange={onChange} className="w-full h-1 bg-[#2A2421] appearance-none cursor-pointer accent-[#FF954F] rounded-full" />
+      <input type="range" min={min} max={max} step="0.1" value={value} onChange={onChange} className="w-full h-1 bg-[#2A2421] appearance-none cursor-pointer accent-[#FF954F] rounded-full" />
     </div>
   );
 }

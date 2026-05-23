@@ -14,13 +14,14 @@ export default function SetupWizard({ onComplete }: Props) {
   const [status, setStatus] = useState("INITIALIZING");
   const [errorMessage, setErrorMessage] = useState("");
   
-  const [formData, setFormData] = useState({
-    senderMode: "SYSTEM", 
-    driverName: "",
-    driverNumber: "",
-    guardians: [{ name: "", phone: "" }], 
-  });
-
+const [formData, setFormData] = useState({
+  senderMode: "SYSTEM", 
+  driverName: "",
+  driverNumber: "",
+  guardians: [{ name: "", phone: "" }], 
+  alarmEnabled: true, // Default to ON
+  voiceEnabled: true  // Default to ON
+});
   // --- VALIDATION HELPERS ---
   const isValidPKNumber = (num: string) => num.startsWith("03") && num.length === 11;
 
