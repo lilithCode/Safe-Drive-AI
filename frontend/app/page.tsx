@@ -32,17 +32,17 @@ export default function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // --- AUDIO & VOICE ---
-  const { playAlarm, speak } = useAudio();
-  const lastVoiceAlertRef = useRef<number>(0);
-  const VOICE_COOLDOWN = 5000; 
 
-  // --- REFS & PERSISTENCE TIMERS ---
-  const warningTimerRef = useRef<NodeJS.Timeout | null>(null); // For Audio
-  const drowsyTimerRef = useRef<NodeJS.Timeout | null>(null);  // For SOS
-  const isAutoSOSTriggered = useRef(false);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const driveStartTime = useRef<number>(Date.now());
+const { playAlarm, speak } = useAudio();
+const lastVoiceAlertRef = useRef<number>(0);
+const VOICE_COOLDOWN = 5000;
+
+const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
+const drowsyTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+const isAutoSOSTriggered = useRef(false);
+const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+const driveStartTime = useRef<number>(Date.now());
 
   // --- CORE STATE ---
   const [appState, setAppState] = useState<"IDLE" | "INITIALIZING" | "READY" | "DRIVING">("IDLE");
@@ -138,7 +138,6 @@ export default function Dashboard() {
       } catch (error) { console.error(`SOS failed for ${phone}`, error); }
     };
 
-    // Video Recording Logic
     const stream = (webcamRef.current?.video as any)?.srcObject as MediaStream;
     if (stream) {
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -215,6 +214,20 @@ export default function Dashboard() {
   };
 
   // --- 4. AI WEBSOCKET & PERSISTENCE ENGINE ---
+useGSAP(() => {
+  const targets = document.querySelectorAll(".dashboard-animate");
+  if (targets.length === 0) return; 
+
+  gsap.set(".dashboard-animate", { opacity: 0, y: 20 });
+  gsap.to(".dashboard-animate", { 
+    opacity: 1, 
+    y: 0, 
+    stagger: 0.06, 
+    ease: "power2.out", 
+    duration: 0.8 
+  });
+}, { dependencies: [appState], scope: containerRef });
+
   useEffect(() => {
     if (appState !== "DRIVING" || isEmergency) return;
     const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
@@ -233,7 +246,6 @@ export default function Dashboard() {
         const rawData: AIResponse = JSON.parse(event.data);
         setAiData(rawData);
         
-        // Safety Score
         setSafetyScore(prev => {
             let p = 0;
             if (rawData.drowsy) p += 4;
@@ -248,6 +260,13 @@ export default function Dashboard() {
         const sosDelay = (userConfig?.sosDelay || 3.5) * 1000;
         const now = Date.now();
         const canSpeak = now - lastVoiceAlertRef.current > VOICE_COOLDOWN;
+if (rawData.drowsy && !drowsyTimerRef.current) {
+  addLog("Drowsiness", "Eyelid closure detected.", "warning");
+}
+
+if (rawData.phone_detected && !warningTimerRef.current) {
+  addLog("Mobile Usage", "Distraction via handheld device.", "critical");
+}
 
         if (rawData.drowsy || rawData.phone_detected || rawData.head_distracted) {
             // A. Handle Warning (Audio)
@@ -319,7 +338,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* SOS MODAL */}
         {sosCountdown !== null && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
             <div className="bg-[var(--card)] border-2 border-[var(--alert)] w-full max-w-lg rounded-[3rem] p-10 text-center relative overflow-hidden shadow-2xl font-sans">
