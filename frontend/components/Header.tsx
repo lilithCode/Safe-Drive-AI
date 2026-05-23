@@ -11,37 +11,20 @@ interface Props {
   onOpenAnalytics?: () => void;
   nerdMode: boolean;
   setNerdMode: (mode: boolean) => void;
-  isModalOpen: boolean; // Added this to trigger header glow/scale
+  isModalOpen: boolean; 
 }
 
 export default function Header({ 
   isConnected, isEmergency, onOpenSettings, onOpenAnalytics, nerdMode, setNerdMode, isModalOpen 
 }: Props) {
   const headerRef = useRef<HTMLDivElement>(null);
-  const brandRef = useRef(null);
   const navRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
+  
   const [activeLabel, setActiveLabel] = useState("HUD Core");
+  const [lastFunctionalTab, setLastFunctionalTab] = useState("HUD Core");
 
-  // Handle Header Glow & Scale Animation
-  useEffect(() => {
-    if (isModalOpen || isEmergency) {
-      gsap.to(headerRef.current, {
-        scale: 1.02,
-        boxShadow: "0 0 20px rgba(232, 176, 95, 0.2)",
-        duration: 0.4,
-        ease: "power2.out"
-      });
-    } else {
-      gsap.to(headerRef.current, {
-        scale: 1,
-        boxShadow: "0 0 0px rgba(0,0,0,0)",
-        duration: 0.4,
-        ease: "power2.in"
-      });
-    }
-  }, [isModalOpen, isEmergency]);
-
+  // Animate pill movement
   useEffect(() => {
     const activeEl = navRef.current?.querySelector(`[data-label="${activeLabel}"]`) as HTMLElement;
     if (activeEl && pillRef.current) {
@@ -54,7 +37,21 @@ export default function Header({
     }
   }, [activeLabel]);
 
-  const handleNavClick = (label: string, action: () => void) => {
+  // Reset tab when modal closes
+  // This hook ensures that when isModalOpen becomes false, 
+  // the pill snaps back to the last functional tab (HUD Core or Dev Mode)
+  useEffect(() => {
+    if (!isModalOpen) {
+      setActiveLabel(lastFunctionalTab);
+    }
+  }, [isModalOpen, lastFunctionalTab]);
+
+  const handleNavClick = (label: string, action: () => void, isFunctional: boolean) => {
+    // Only update the "lastFunctionalTab" if it's one of the main HUD/Dev views
+    if (isFunctional) {
+      setLastFunctionalTab(label);
+    }
+    // Always update activeLabel so the pill moves to the clicked item
     setActiveLabel(label);
     action();
   };
@@ -62,34 +59,32 @@ export default function Header({
   return (
     <header 
       ref={headerRef}
-      className="flex flex-wrap justify-between items-center max-w-[1600px] mx-auto gap-4 px-2 sm:px-0 transition-all duration-500"
+      className="flex flex-wrap justify-between w-full items-center max-w-[1700px] mx-auto gap-6 px-6 py-4 animate-in slide-in-from-bottom-8 duration-700"
     >
-      {/* Brand Section */}
-      <div ref={brandRef} className="flex items-center gap-4 cursor-pointer">
-        <div className="relative w-12 h-12 bg-[var(--card)] border border-[var(--border)] rounded-xl flex items-center justify-center text-[var(--accent)] shadow-2xl">
-          <ShieldCheck size={24} />
+      {/* 2. Brand Section (Center) */}
+      <div className="flex items-center gap-4 cursor-pointer">
+        <div className="w-10 h-10 bg-[var(--card)] border border-[var(--border)] rounded-xl flex items-center justify-center text-[var(--accent)]">
+          <ShieldCheck size={20} />
         </div>
-        <div className="flex flex-col">
-          <h1 className="text-2xl font-black text-[var(--card)] tracking-tighter uppercase leading-none">
-            SafeDrive <span className="text-[var(--accent)]">AI</span>
-          </h1>
-        </div>
+        <h1 className="text-xl font-black text-[var(--card)] tracking-tighter uppercase leading-none">
+          SafeDrive <span className="text-[var(--accent)]">AI</span>
+        </h1>
       </div>
 
-      {/* Navigation Cluster Dock */}
-      <nav ref={navRef} className="relative flex items-center bg-[var(--card)] border border-[var(--border)] rounded-full p-1.5 shadow-xl">
+      {/* 3. Navigation Dock (Moved to Right) */}
+      <nav ref={navRef} className="relative flex items-center bg-[var(--card)] border border-[var(--border)] rounded-full p-1.5 shadow-xl ">
         <div ref={pillRef} className="absolute h-[calc(100%-12px)] bg-[var(--accent)] rounded-full shadow-lg z-0" />
         
-        <NavLink label="HUD Core" icon={<LayoutDashboard size={14}/>} active={activeLabel === "HUD Core"} onClick={() => handleNavClick("HUD Core", () => setNerdMode(false))} />
-        <NavLink label="Nerd Mode" icon={<Terminal size={14}/>} active={activeLabel === "Nerd Mode"} onClick={() => handleNavClick("Nerd Mode", () => setNerdMode(true))} />
-        <NavLink label="Analytics Logs" icon={<BarChart3 size={14}/>} active={activeLabel === "Analytics Logs"} onClick={() => handleNavClick("Analytics Logs", onOpenAnalytics!)} />
-        <NavLink label="Settings" icon={<Settings size={14}/>} active={activeLabel === "Settings"} onClick={() => handleNavClick("Settings", onOpenSettings)} />
+        <NavLink label="HUD Core" icon={<LayoutDashboard size={14}/>} active={activeLabel === "HUD Core"} onClick={() => handleNavClick("HUD Core", () => setNerdMode(false), true)} />
+        <NavLink label="Dev Mode" icon={<Terminal size={14}/>} active={activeLabel === "Dev Mode"} onClick={() => handleNavClick("Dev Mode", () => setNerdMode(true), true)} />
+        <NavLink label="History" icon={<BarChart3 size={14}/>} active={activeLabel === "History"} onClick={() => handleNavClick("History", onOpenAnalytics!, false)} />
+        <NavLink label="Settings" icon={<Settings size={14}/>} active={activeLabel === "Settings"} onClick={() => handleNavClick("Settings", onOpenSettings, false)} />
       </nav>
 
-      {/* Status Badge */}
+      {/* 1. Status Badge (Moved to Left) */}
       <div className="flex items-center gap-3 bg-[var(--card)] border border-[var(--border)] pl-3 pr-5 py-2.5 rounded-full shadow-xl">
         <div className={`w-2.5 h-2.5 rounded-full ${isEmergency ? "bg-[var(--alert)] animate-pulse" : "bg-[var(--success)]"}`}></div>
-        <span className="text-[10px] font-bold tracking-widest uppercase">{isEmergency ? "Emergency" : "Active & Secure"}</span>
+        <span className="text-[10px] font-bold tracking-widest uppercase">{isEmergency ? "Emergency" : "System Secure"}</span>
       </div>
     </header>
   );
