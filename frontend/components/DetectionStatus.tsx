@@ -96,7 +96,7 @@ function StatusBox({
 
   return (
     <div
-      className={`bg-[var(--background)]/40 rounded-2xl border transition-all duration-500 overflow-hidden flex flex-col justify-center border-[var(--border)] ${
+      className={`bg-[var(--background)]/1 rounded-2xl border transition-all duration-500 overflow-hidden flex flex-col justify-center border-[var(--border)] ${
         nerdMode 
           ? "p-4 sm:p-5 hover:bg-[var(--background)]/60 hover:border-[var(--accent)]/30" 
           : "p-2 sm:p-3 items-center text-center"

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { AlertCircle, AlertTriangle, Info, Terminal, Filter } from "lucide-react";
+import { AlertCircle, AlertTriangle, Info, Terminal, Filter, Clock } from "lucide-react";
 
 interface AlertHistoryProps {
   logs: any[];
@@ -11,104 +11,94 @@ interface AlertHistoryProps {
 export default function AlertHistory({ logs, isModalView = false }: AlertHistoryProps) {
   const [severityFilter, setSeverityFilter] = useState<"all" | "critical" | "warning" | "info">("all");
 
-  // Telemetry stream classification sorting routine
-  const filteredLogs = logs.filter((log) => {
-    if (severityFilter === "all") return true;
-    return log.type === severityFilter;
-  });
+  // Show all logs in Nerd Mode, or apply filter in Modal View
+  const filteredLogs = isModalView 
+    ? logs.filter((log) => severityFilter === "all" ? true : log.type === severityFilter)
+    : logs;
 
   return (
-    <div className="bg-[#3D2B1F] w-full  h-full rounded-2xl border-0 sm:border sm:border-[#4D392C] p-2 sm:p-4 flex flex-col transition-all duration-300 overflow-hidden">
+    <div className={`bg-[#3D2B1F] w-full h-full flex flex-col transition-all duration-300 overflow-hidden ${isModalView ? "p-4 sm:p-6" : "p-3"}`}>
       
-      {/* Terminal Header Row */}
-      <div className="flex items-center justify-between border-b border-[#4D392C] pb-3 mb-4 shrink-0">
+      {/* Terminal Header - Slimmer in Nerd Mode */}
+      <div className={`flex items-center justify-between border-b border-[#4D392C] ${isModalView ? "pb-4 mb-4" : "pb-2 mb-3"} shrink-0`}>
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 bg-[#E8B06F]/10 border border-[#E8B06F]/20 rounded-lg text-[#E8B06F]">
-            <Terminal size={14} />
+            <Terminal size={isModalView ? 16 : 12} />
           </div>
           <div>
-            <h3 className="text-[13px] font-black text-white uppercase tracking-wider leading-none">
-              System Analytics Terminal
+            <h3 className={`${isModalView ? "text-sm" : "text-[11px]"} font-black text-white uppercase tracking-wider leading-none`}>
+              {isModalView ? "System Analytics Terminal" : "Live Event Log"}
             </h3>
-            <p className="text-[9px] text-[#BFA899] uppercase tracking-widest mt-1 font-bold opacity-60">
-              Live Diagnostic Security Logs
-            </p>
+            {isModalView && (
+              <p className="text-[9px] text-[#BFA899] uppercase tracking-widest mt-1 font-bold opacity-60">
+                Diagnostic Security Trace
+              </p>
+            )}
           </div>
         </div>
-      </div>
-
-      {/* Severity Filter Controller Tabs Row */}
-      <div className="flex flex-wrap items-center gap-2 mb-4 bg-[#2A1E16]/40 p-1.5 rounded-xl border border-[#4D392C] shrink-0">
-        <div className="flex items-center gap-1.5 px-1 text-[9px] font-black text-[#BFA899] uppercase tracking-wider opacity-60 mr-1">
-          <Filter size={10} strokeWidth={3} />
-          Filter:
-        </div>
-
-        <FilterTab active={severityFilter === "all"} label="ALL" count={logs.length} onClick={() => setSeverityFilter("all")} />
-        <FilterTab active={severityFilter === "critical"} label="CRITICAL" count={logs.filter(l => l.type === "critical").length} color="text-[#D9534F]" onClick={() => setSeverityFilter("critical")} />
-        <FilterTab active={severityFilter === "warning"} label="WARNINGS" count={logs.filter(l => l.type === "warning").length} color="text-[#E8B06F]" onClick={() => setSeverityFilter("warning")} />
-      </div>
-
-      {/* Log Stream Content Container - Adapts to take up the full screen height in modal view */}
-      <div className={`w-full flex-1 overflow-y-auto pr-1 custom-scrollbar ${isModalView ? "h-full" : "min-h-[130px]"}`}>
-        {filteredLogs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full min-h-[160px] text-center bg-[#2A1E16]/20 rounded-xl border border-dashed border-[#4D392C]/40 py-8">
-            <div className="w-9 h-9 rounded-full bg-[#2A1E16] flex items-center justify-center mb-2 border border-[#4D392C]">
-              <Info size={15} className="text-[#BFA899]" />
+        {!isModalView && (
+            <div className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E8B06F] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E8B06F]"></span>
+                </span>
+                <span className="text-[9px] font-black text-[#E8B06F] uppercase">Live</span>
             </div>
-            <p className="text-xs font-bold text-[#BFA899]">
-              No streams filtered under this severity tier.
+        )}
+      </div>
+
+      {/* Filters - ONLY shown in Modal View */}
+      {isModalView && (
+        <div className="flex flex-wrap items-center gap-2 mb-4 bg-[#2A1E16]/40 p-1.5 rounded-xl border border-[#4D392C] shrink-0">
+          <div className="flex items-center gap-1.5 px-1 text-[9px] font-black text-[#BFA899] uppercase tracking-wider opacity-60 mr-1">
+            <Filter size={10} strokeWidth={3} />
+            Filter:
+          </div>
+          <FilterTab active={severityFilter === "all"} label="ALL" count={logs.length} onClick={() => setSeverityFilter("all")} />
+          <FilterTab active={severityFilter === "critical"} label="CRITICAL" count={logs.filter(l => l.type === "critical").length} color="text-[#D9534F]" onClick={() => setSeverityFilter("critical")} />
+          <FilterTab active={severityFilter === "warning"} label="WARNINGS" count={logs.filter(l => l.type === "warning").length} color="text-[#E8B06F]" onClick={() => setSeverityFilter("warning")} />
+        </div>
+      )}
+
+      {/* Log Stream */}
+      <div className={`w-full flex-1 overflow-y-auto pr-1 custom-scrollbar`}>
+        {filteredLogs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center opacity-40 py-4">
+            <Info size={20} className="text-[#BFA899] mb-2" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#BFA899]">
+              No Events Logged
             </p>
           </div>
         ) : (
-          <div className="space-y-2 pb-4">
-            {filteredLogs.map((log) => (
+          <div className={`${isModalView ? "space-y-3" : "space-y-2"} pb-4`}>
+            {filteredLogs.map((log, idx) => (
               <div
-                key={log.id}
-                className="flex items-center gap-3 bg-[#2A1E16]/50 p-3.5 rounded-xl border border-[#4D392C] hover:border-[#E8B06F]/20 transition-all group animate-in fade-in duration-200"
+                key={log.id || idx}
+                className={`flex items-center gap-3 bg-[#2A1E16]/50 rounded-xl border border-[#4D392C] hover:border-[#E8B06F]/20 transition-all group animate-in fade-in slide-in-from-left-2 duration-300 ${isModalView ? "p-4" : "p-2.5"}`}
               >
-                {/* Contextual Icon Display */}
+                {/* Severity Icon */}
                 <div
-                  className={`p-2 rounded-lg border shrink-0 ${
+                  className={`p-1.5 rounded-lg border shrink-0 ${
                     log.type === "critical"
                       ? "bg-[#D9534F]/10 text-[#D9534F] border-[#D9534F]/20"
-                      : log.type === "warning"
-                      ? "bg-[#E8B06F]/10 text-[#E8B06F] border-[#E8B06F]/20"
-                      : "bg-[#BFA899]/10 text-[#BFA899] border-[#BFA899]/20"
+                      : "bg-[#E8B06F]/10 text-[#E8B06F] border-[#E8B06F]/20"
                   }`}
                 >
-                  {log.type === "critical" ? (
-                    <AlertCircle size={15} strokeWidth={2.5} />
-                  ) : log.type === "warning" ? (
-                    <AlertTriangle size={15} strokeWidth={2.5} />
-                  ) : (
-                    <Info size={15} strokeWidth={2.5} />
-                  )}
+                  {log.type === "critical" ? <AlertCircle size={14} /> : <AlertTriangle size={14} />}
                 </div>
 
-                {/* Telemetry Text Body */}
                 <div className="flex-1 min-w-0">
-                  <div className="font-black text-white text-xs sm:text-sm tracking-tight truncate">
-                    {log.title || "Alert Log Trace"}
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-black text-white text-[11px] uppercase tracking-tight truncate">
+                      {log.title || "AI FLAG"}
+                    </span>
+                    <span className="font-mono text-[9px] text-[#E8B06F]/60 flex items-center gap-1">
+                       <Clock size={8}/> {log.time}
+                    </span>
                   </div>
-                  <div className="text-[10px] sm:text-[11px] font-bold text-[#BFA899] truncate mt-0.5 opacity-80">
-                    <span className="font-mono text-[#E8B06F]/70">{log.time}</span>
-                    <span className="mx-2 opacity-30">•</span>
+                  <p className="text-[10px] font-bold text-[#BFA899] truncate opacity-80 italic">
                     {log.desc || log.message}
-                  </div>
-                </div>
-
-                {/* Side Tag Badge */}
-                <div
-                  className={`hidden xs:block text-[8px] px-2 py-0.5 rounded-md font-black uppercase tracking-wider border shrink-0 ${
-                    log.type === "critical"
-                      ? "bg-[#D9534F]/10 border-[#D9534F]/20 text-[#D9534F]"
-                      : log.type === "warning"
-                      ? "bg-[#E8B06F]/10 border-[#E8B06F]/20 text-[#E8B06F]"
-                      : "bg-[#BFA899]/10 border-[#BFA899]/20 text-[#BFA899]"
-                  }`}
-                >
-                  {log.type || "trace"}
+                  </p>
                 </div>
               </div>
             ))}
@@ -116,41 +106,26 @@ export default function AlertHistory({ logs, isModalView = false }: AlertHistory
         )}
       </div>
 
-      {/* Styled Terminal Scrollbar Config */}
       <style jsx>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #4D392C;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #E8B06F;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4D392C; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #E8B06F; }
       `}</style>
     </div>
   );
 }
 
-// Sub-component tab controller button
-function FilterTab({ label, count, active, color, onClick }: { label: string, count: number, active: boolean, color?: string, onClick: () => void }) {
+function FilterTab({ label, count, active, color, onClick }: any) {
   return (
     <button
       onClick={onClick}
-      className={`px-2.5 py-2 rounded-md text-[12px] font-black uppercase tracking-wider transition-all select-none flex items-center gap-1.5 ${
-        active 
-          ? "bg-[#E8B06F] text-[#3D2B1F] shadow-sm font-black" 
-          : "text-[#BFA899] hover:bg-[#2A1E16]/80 hover:text-white"
+      className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 ${
+        active ? "bg-[#E8B06F] text-[#3D2B1F]" : "text-[#BFA899] hover:bg-[#2A1E16]"
       }`}
     >
-      <span className={active ? "text-inherit" : color}>{label}</span>
-      <span className={`text-[12px] font-mono px-1 rounded-sm ${active ? "bg-[#3D2B1F]/20 text-[#3D2B1F]" : "bg-[#3D2B1F] text-[#BFA899]"}`}>
-        {count}
-      </span>
+      <span className={active ? "" : color}>{label}</span>
+      <span className="opacity-50">{count}</span>
     </button>
   );
 }
