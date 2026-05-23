@@ -31,13 +31,11 @@ export default function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
-  // --- PERSISTENCE & AUTO-SOS REFS ---
   const drowsyTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isAutoSOSTriggered = useRef(false);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const driveStartTime = useRef<number>(Date.now());
 
-  // --- CORE STATE (DECLARED FIRST) ---
   const [appState, setAppState] = useState<"IDLE" | "INITIALIZING" | "READY" | "DRIVING">("IDLE");
   const [isEmergency, setIsEmergency] = useState(false);
   const [nerdMode, setNerdMode] = useState(false);
@@ -53,7 +51,6 @@ export default function Dashboard() {
   const [userConfig, setUserConfig] = useState<any>(null);
   const [needsSetup, setNeedsSetup] = useState(false);
 
-  // 1. Load configuration & Persistent Logs
   useEffect(() => {
     const savedConfig = localStorage.getItem("safedrive_user_config");
     const savedLogs = localStorage.getItem("safedrive_alert_logs");
@@ -64,7 +61,6 @@ export default function Dashboard() {
     if (savedLogs) setAlertLogs(JSON.parse(savedLogs));
   }, []);
 
-  // Log Helper
   const addLog = useCallback((title: string, desc: string, type: "critical" | "warning") => {
     setAlertLogs((prev) => {
       const newLog = { id: Date.now(), time: new Date().toLocaleTimeString(), title, desc, type };
@@ -74,7 +70,6 @@ export default function Dashboard() {
     });
   }, []);
 
-  // Timer Logic
   useEffect(() => {
     if (appState !== "DRIVING") return;
     driveStartTime.current = Date.now();
@@ -84,7 +79,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [appState]);
 
-  // --- SOS EXECUTION ---
   const executeSOS = useCallback(async (targetPhone?: string) => {
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     setSosCountdown(null);
@@ -116,7 +110,6 @@ export default function Dashboard() {
       } catch (error) { console.error("SOS Failed", error); }
     };
 
-    // Video Recording Logic
     const stream = (webcamRef.current?.video as any)?.srcObject as MediaStream;
     if (stream) {
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -132,7 +125,6 @@ export default function Dashboard() {
       setTimeout(() => { if(mediaRecorder.state !== "inactive") mediaRecorder.stop() }, 5000);
     }
 
-    // Geolocation Flow
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
@@ -149,7 +141,6 @@ export default function Dashboard() {
     }
   }, [userConfig, addLog]);
 
-  // --- TRIGGER SOS (Manual = Immediate | AI = Countdown) ---
   const triggerSOS = useCallback((type: "AI" | "MANUAL", targetPhone?: string) => {
     if (isEmergency || sosCountdown !== null) return;
     
@@ -177,14 +168,20 @@ export default function Dashboard() {
     addLog("MONITORING RESUMED", "Driver dismissed emergency mode.", "info");
   };
 
-  // Entrance Animation
-  useGSAP(() => {
-    if (appState !== "DRIVING") return;
-    gsap.set(".dashboard-animate", { opacity: 0, y: 20 });
-    gsap.to(".dashboard-animate", { opacity: 1, y: 0, stagger: 0.06, ease: "power2.out", duration: 0.8 });
-  }, { dependencies: [appState], scope: containerRef });
+useGSAP(() => {
+  const targets = document.querySelectorAll(".dashboard-animate");
+  if (targets.length === 0) return; 
 
-  // AI WebSocket Logic
+  gsap.set(".dashboard-animate", { opacity: 0, y: 20 });
+  gsap.to(".dashboard-animate", { 
+    opacity: 1, 
+    y: 0, 
+    stagger: 0.06, 
+    ease: "power2.out", 
+    duration: 0.8 
+  });
+}, { dependencies: [appState], scope: containerRef });
+
   useEffect(() => {
     if (appState !== "DRIVING" || isEmergency) return;
     const ws = new WebSocket("ws://127.0.0.1:8000/ws/video");
@@ -203,7 +200,6 @@ export default function Dashboard() {
         const rawData: AIResponse = JSON.parse(event.data);
         setAiData(rawData);
         
-        // Safety Score
         setSafetyScore(prev => {
             let p = 0;
             if (rawData.drowsy) p += 4;
@@ -212,7 +208,6 @@ export default function Dashboard() {
             return Math.min(100, prev + 0.3);
         });
 
-        // Logs
         if (rawData.drowsy && !drowsyTimerRef.current) addLog("Drowsiness", "Eyelid closure detected.", "warning");
         if (rawData.phone_detected) addLog("Mobile Usage", "Distraction via handheld device.", "critical");
 
@@ -245,7 +240,6 @@ export default function Dashboard() {
             <div className="flex-1 rounded-[2.5rem] bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden relative transform-gpu">
               <MemoVideoFeed webcamRef={webcamRef} canvasRef={canvasRef} aiData={aiData} isEmergency={isEmergency} alertsToday={alertsToday} driveTime={driveTime} safetyScore={safetyScore} nerdMode={nerdMode} />
               
-              {/* RECOVERY BUTTON */}
               {isEmergency && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px] z-50 animate-in fade-in">
                   <button onClick={resetEmergency} className="group flex items-center gap-3 bg-white text-black px-12 py-6 rounded-full font-black uppercase tracking-widest shadow-2xl hover:scale-105 active:scale-95 transition-all">
@@ -272,7 +266,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* SOS MODAL */}
         {sosCountdown !== null && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
             <div className="bg-[var(--card)] border-2 border-[var(--alert)] w-full max-w-lg rounded-[3rem] p-10 text-center relative overflow-hidden shadow-2xl">
